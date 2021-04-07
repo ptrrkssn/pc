@@ -13,4 +13,4 @@ btree.o: btree.c btree.h
 pc.o: pc.c digest.h btree.h
 
 clean:
-	-rm -f *.o pc \#* *~ core
+	-rm -fr *.o pc \#* *~ core t;mkdir t
