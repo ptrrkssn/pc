@@ -1,0 +1,28 @@
+pc/pcp/pct - or something
+
+Peter's Clone Tool
+
+This is a tool similar to cp but with a number of added features like a mirror mode
+(similar to rsync, but only locally), and that it understands ACLs and Extended Attributes.
+
+USAGE
+
+  # Dry-run, verbose, mirror-mode
+  pc -n -v -m dir-a dir-b
+  
+
+AUTHOR
+
+  Peter Eriksson <pen@lysator.liu.se>
+
+
+PRIMARY DOWNLOAD SITE
+
+  https://github.com/ptrrkssn/pc
+  
+
+OPERATING SYSTEMS SUPPORTED
+
+  - FreeBSD (tested on 12.2)
+
+
