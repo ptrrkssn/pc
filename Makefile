@@ -1,7 +1,7 @@
 # Makefile
 
-CFLAGS=-g -O
-CPPFLAGS=-I/usr/local/include
+CC=gcc
+CFLAGS=-O -g -Wall
 
 OBJS=pc.o btree.o digest.o
 

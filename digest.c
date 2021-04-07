@@ -107,10 +107,7 @@ digest_type2str(DIGEST_TYPE type) {
 
 int
 digest_init(DIGEST *dp,
-	    const char *s_type) {
-  DIGEST_TYPE type = digest_str2type(s_type);
-
-  
+	    DIGEST_TYPE type) {
   if (type == DIGEST_TYPE_INVALID)
     return -1;
   

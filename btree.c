@@ -188,7 +188,6 @@ bnode_next(BNODE *n) {
   return n;
 }
 
-
 static inline BNODE *
 bnode_delete(BTREE *bt,
 	     const char *key,

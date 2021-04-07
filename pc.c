@@ -39,6 +39,7 @@
 #include <errno.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -46,14 +47,17 @@
 #include <sys/param.h>
 #include <sys/vnode.h>
 #include <sys/extattr.h>
+#include <sys/socket.h>
+
 
 #include "btree.h"
 #include "digest.h"
 
 
 typedef struct nodeinfo {
+  char *p;
   struct stat s;
-  char *d;
+  char *l;
   struct {
     acl_t nfs; /* NFSv4 / ZFS */
     acl_t acc; /* POSIX */
@@ -63,6 +67,10 @@ typedef struct nodeinfo {
     BTREE *sys;
     BTREE *usr;
   } x;
+  struct {
+    unsigned char buf[DIGEST_BUFSIZE_MAX];
+    size_t len;
+  } d;
 } NODEINFO;
 
 
@@ -72,7 +80,9 @@ int f_verbose = 0;
 int f_debug   = 0;
 int f_update  = 1;
 int f_recurse = 0;
-int f_mirror  = 0;
+int f_remove  = 0;
+int f_perms   = 0;
+int f_times   = 0;
 int f_acls    = 0;
 int f_attrs   = 0;
 int f_digest  = 0;
@@ -114,6 +124,265 @@ typedef struct attrinfo {
   unsigned char buf[];
 } ATTRINFO;
 
+typedef struct attrupdate {
+  int fd;
+  int ns;
+  const char *pn;
+} ATTRUPDATE;
+
+int
+attr_update(const char *key,
+	    void *vp,
+	    void *xp) {
+  ATTRINFO   *aip = (ATTRINFO *) vp;
+  ATTRUPDATE *aup = (ATTRUPDATE *) xp;
+
+  if (aup->pn)
+    return extattr_set_link(aup->pn, aup->ns, key, aip->buf, aip->len);
+
+  return extattr_set_fd(aup->fd, aup->ns, key, aip->buf, aip->len);
+}
+
+int
+file_digest(NODEINFO *nip) {
+  unsigned char buf[128*1024];
+  ssize_t len;
+  int fd;
+  DIGEST d;
+  
+
+  if (!nip)
+    return 0;
+  
+  fd = open(nip->p, O_RDONLY);
+  if (fd < 0)
+    return -1;
+  
+  digest_init(&d, f_digest);
+  while ((len = read(fd, buf, sizeof(buf))) > 0) {
+    digest_update(&d, buf, len);
+  }
+  close(fd);
+  nip->d.len = digest_final(&d, nip->d.buf, sizeof(nip->d.buf));
+  return 0;
+}
+
+
+int
+file_copy(NODEINFO *src_nip,
+	  const char *dstpath) {
+  off_t sbytes, tbytes;
+  int src_fd = -1, dst_fd = -1, rc = -1;
+  char buf[128*1024];
+  
+
+  if (S_ISREG(src_nip->s.st_mode)) {
+    src_fd = open(src_nip->p, O_RDONLY);
+    if (src_fd < 0) {
+      fprintf(stderr, "open(%s, O_RDONLY): %s\n", src_nip->p, strerror(errno));
+      rc = -1;
+      goto End;
+    }
+    
+    dst_fd = open(dstpath, O_WRONLY|O_CREAT, src_nip->s.st_mode);
+    if (dst_fd < 0) {
+      fprintf(stderr, "open(%s, O_WRONLY|O_CREAT): %s\n", dstpath, strerror(errno));
+      rc = -1;
+      goto End;
+    }
+    
+    sbytes = 0;
+    tbytes = 0;
+#if 0
+    while ((rc = sendfile(src_fd, dst_fd, tbytes, SENDFILE_BUFSIZE, NULL, &sbytes, SF_NOCACHE)) > 0 ||
+	   errno == EAGAIN) {
+      tbytes += sbytes;
+      if (f_verbose > 1)
+	printf("  %ld bytes copied\r", tbytes);
+      sbytes = 0;
+    }
+    if (rc < 0) {
+      fprintf(stderr, "sendfile(%s,%s): %s\n", src_nip->p, dstpath, strerror(errno));
+      rc = -1;
+      goto End;
+  }
+#else
+    while ((sbytes = read(src_fd, buf, sizeof(buf))) > 0) {
+      rc = write(dst_fd, buf, sbytes);
+      if (rc < 0) {
+	fprintf(stderr, "%s: Error: write(%s, ..., %ld): %s\n", argv0, dstpath, sbytes, strerror(errno));
+	rc = -1;
+	goto End;
+      }
+      tbytes += sbytes;
+      if (f_verbose > 1)
+	printf("  %ld bytes copied\r", tbytes);
+    }
+    rc = sbytes;
+#endif
+    if (rc < 0) {
+      fprintf(stderr, "write(%s): %s\n", dstpath, strerror(errno));
+      rc = -1;
+      goto End;
+    }
+    
+    tbytes += sbytes;
+    if (f_verbose > 1)
+      printf("  %ld bytes copied\n", tbytes);
+  }
+
+  if (0) {
+  if (f_perms) {
+    if (fchown(dst_fd, src_nip->s.st_uid, src_nip->s.st_gid) < 0) {
+      fprintf(stderr, "%s: Error: futimens(%s): %s\n",
+	      argv0, dstpath, strerror(errno));
+      rc = -1;
+      goto End;
+    }
+  }
+  
+  if (f_attrs) {
+    ATTRUPDATE aub;
+    
+    aub.fd = dst_fd;
+    aub.pn = NULL;
+    
+    if (src_nip->x.sys) {
+      aub.ns = EXTATTR_NAMESPACE_SYSTEM;
+      btree_foreach(src_nip->x.sys, attr_update, &aub);
+    }
+    
+    if (src_nip->x.usr) {
+      aub.ns = EXTATTR_NAMESPACE_USER;
+      btree_foreach(src_nip->x.usr, attr_update, &aub);
+    }
+  }
+  
+  if (f_acls) {
+    if (src_nip->a.nfs) {
+      if (acl_set_fd_np(dst_fd, src_nip->a.nfs, ACL_TYPE_NFS4) < 0) {
+	fprintf(stderr, "%s: Error: %s: acl_set_fd_np(ACL_TYPE_NFS4): %s\n",
+		argv0, dstpath, strerror(errno));
+	rc = -1;
+	goto End;
+      }
+    }
+    if (src_nip->a.acc) {
+      if (acl_set_fd_np(dst_fd, src_nip->a.acc, ACL_TYPE_ACCESS) < 0) {
+	fprintf(stderr, "%s: Error: %s: acl_set_fd_np(ACL_TYPE_ACCESS): %s\n",
+		argv0, dstpath, strerror(errno));
+	rc = -1;
+	goto End;
+      }
+    }
+    if (src_nip->a.def) {
+      if (acl_set_fd_np(dst_fd, src_nip->a.def, ACL_TYPE_DEFAULT) < 0) {
+	fprintf(stderr, "%s: Error: %s: acl_set_fd_np(ACL_TYPE_DEFAULT): %s\n",
+		argv0, dstpath, strerror(errno));
+	rc = -1;
+	goto End;
+      }
+    }
+  }
+  
+  if (f_times) {
+    struct timespec times[2];
+
+    times[0] = src_nip->s.st_atim;
+    times[1] = src_nip->s.st_mtim;
+    if (futimens(dst_fd, times) < 0) {
+      fprintf(stderr, "%s: Error: futimens(%s): %s\n",
+	      argv0, dstpath, strerror(errno));
+      rc = -1;
+      goto End;
+    }
+  }
+  }
+  
+ End:
+  if (dst_fd >= 0)
+    close(dst_fd);
+  if (src_fd >= 0)
+    close(src_fd);
+  
+  return rc;
+}
+
+
+int
+node_update(NODEINFO *src_nip,
+	    const char *dstpath) {
+  int rc = 0;
+  
+  if (f_perms) {
+    if (lchmod(dstpath, src_nip->s.st_mode) < 0) {
+      fprintf(stderr, "%s: Error: %s: lchmod: %s\n",
+	      argv0, dstpath, strerror(errno));
+      rc = -1;
+    }
+    
+    if (lchown(dstpath, src_nip->s.st_uid, src_nip->s.st_gid) < 0) {
+      fprintf(stderr, "%s: Error: %s: lchown: %s\n",
+	      argv0, dstpath, strerror(errno));
+      rc = -1;
+    }
+  }
+  
+  if (f_attrs) {
+    ATTRUPDATE aub;
+    
+    aub.fd = -1;
+    aub.pn = dstpath;
+    
+    if (src_nip->x.sys) {
+      aub.ns = EXTATTR_NAMESPACE_SYSTEM;
+      btree_foreach(src_nip->x.sys, attr_update, &aub);
+    }
+    
+    if (src_nip->x.usr) {
+      aub.ns = EXTATTR_NAMESPACE_USER;
+      btree_foreach(src_nip->x.usr, attr_update, &aub);
+    }
+  }
+  
+  if (f_acls) {
+    if (src_nip->a.nfs) {
+      if (acl_set_link_np(dstpath, ACL_TYPE_NFS4, src_nip->a.nfs) < 0) {
+	fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_NFS4): %s\n",
+		argv0, dstpath, strerror(errno));
+	rc = -1;
+      }
+    }
+    if (src_nip->a.acc) {
+      if (acl_set_link_np(dstpath, ACL_TYPE_ACCESS, src_nip->a.acc) < 0) {
+	fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_ACCESS): %s\n",
+		argv0, dstpath, strerror(errno));
+	rc = -1;
+      }
+    }
+    if (src_nip->a.def) {
+      if (acl_set_link_np(dstpath, ACL_TYPE_DEFAULT, src_nip->a.def) < 0) {
+	fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_DEFAULT): %s\n",
+		argv0, dstpath, strerror(errno));
+	rc = -1;
+      }
+    }
+  }
+  
+  if (f_times) {
+    struct timespec times[2];
+    
+    times[0] = src_nip->s.st_atim;
+    times[1] = src_nip->s.st_mtim;
+    if (utimensat(AT_FDCWD, dstpath, times, AT_SYMLINK_NOFOLLOW) < 0) {
+      fprintf(stderr, "%s: Error: utimensat(%s): %s\n",
+	      argv0, dstpath, strerror(errno));
+      rc = -1;
+    }
+  }
+  
+  return rc;
+}
 
 
 
@@ -216,9 +485,12 @@ nodeinfo_free(void *vp) {
 
   if (!nip)
     return;
+
+  if (nip->p)
+    free(nip->p);
   
-  if (nip->d)
-    free(nip->d);
+  if (nip->l)
+    free(nip->l);
 
   if (nip->a.nfs)
     acl_free(nip->a.nfs);
@@ -241,57 +513,66 @@ nodeinfo_get(const char *path,
 	     const char *file) {
   NODEINFO *nip = NULL;
 
-  if (file) {
-    path = strdupcat(path, "/", file, NULL);
-    if (!path)
-      abort();
-  }
   
   nip = malloc(sizeof(*nip));
   if (!nip)
     abort();
+
+  if (file)
+    nip->p = strdupcat(path, "/", file, NULL);
+  else
+    nip->p = strdup(path);
+  if (!nip->p)
+    abort();
   
-  memset(nip, 0, sizeof(*nip));
+  nip->l = NULL;
+  nip->a.nfs = NULL;
+  nip->a.acc = NULL;
+  nip->a.def = NULL;
+  nip->x.sys = NULL;
+  nip->x.usr = NULL;
+  nip->d.len = 0;
   
-  if (lstat(path, &nip->s) < 0) {
+  if (lstat(nip->p, &nip->s) < 0) {
+    free(nip->p);
     free(nip);
     nip = NULL;
   } else {
     if (S_ISLNK(nip->s.st_mode)) {
       char buf[1024];
       
-      if (readlink(path, buf, sizeof(buf)) < 0) {
+      if (readlink(nip->p, buf, sizeof(buf)) < 0) {
 	fprintf(stderr, "%s: Error: %s: readlink: %s\n",
-		argv0, path, strerror(errno));
+		argv0, nip->p, strerror(errno));
 	exit(1); /* XXX: Better handling needed */
       } else {
-	nip->d = strdup(buf);
-	if (!nip->d)
+	nip->l = strdup(buf);
+	if (!nip->l)
 	  abort(); /* XXX: Better error handling */
       }
     }
     
     if (f_acls) {
       if (S_ISLNK(nip->s.st_mode)) {
-	nip->a.nfs = acl_get_link_np(path, ACL_TYPE_NFS4);
-	nip->a.acc = acl_get_link_np(path, ACL_TYPE_ACCESS);
-	nip->a.def = acl_get_link_np(path, ACL_TYPE_DEFAULT);
+	nip->a.nfs = acl_get_link_np(nip->p, ACL_TYPE_NFS4);
+	nip->a.acc = acl_get_link_np(nip->p, ACL_TYPE_ACCESS);
+	nip->a.def = acl_get_link_np(nip->p, ACL_TYPE_DEFAULT);
       } else {
-	nip->a.nfs = acl_get_file(path, ACL_TYPE_NFS4);
-	nip->a.acc = acl_get_file(path, ACL_TYPE_ACCESS);
-	nip->a.def = acl_get_file(path, ACL_TYPE_DEFAULT);
+	nip->a.nfs = acl_get_file(nip->p, ACL_TYPE_NFS4);
+	nip->a.acc = acl_get_file(nip->p, ACL_TYPE_ACCESS);
+	nip->a.def = acl_get_file(nip->p, ACL_TYPE_DEFAULT);
       }
     }
     
     if (f_attrs) {
-      nip->x.sys = attrs_get(path, S_ISLNK(nip->s.st_mode), EXTATTR_NAMESPACE_SYSTEM);
-      nip->x.usr = attrs_get(path, S_ISLNK(nip->s.st_mode), EXTATTR_NAMESPACE_USER);
+      nip->x.sys = attrs_get(nip->p, S_ISLNK(nip->s.st_mode), EXTATTR_NAMESPACE_SYSTEM);
+      nip->x.usr = attrs_get(nip->p, S_ISLNK(nip->s.st_mode), EXTATTR_NAMESPACE_USER);
     }
   }
-  
-  if (file)
-    free((void *) path);
-  
+
+  if (f_digest) {
+    file_digest(nip);
+  }
   return nip;
 }
 
@@ -309,6 +590,7 @@ dir_load(const char *path) {
   dp = opendir(path);
   if (!dp) {
     NODEINFO *nip = nodeinfo_get(path, NULL);
+    
     if (nip)
       btree_insert(bp, strdup(path), nip);
     else if (errno != ENOENT) {
@@ -322,6 +604,7 @@ dir_load(const char *path) {
     if (strcmp(dep->d_name, ".") != 0 &&
 	strcmp(dep->d_name, "..") != 0) {
       NODEINFO *nip = nodeinfo_get(path, dep->d_name);
+      
       if (!nip) {
 	fprintf(stderr, "%s: Error: %s/%s: %s\n", argv0, path, dep->d_name, strerror(errno));
 	exit(1);
@@ -393,7 +676,7 @@ int node_print(const char *key,
   printf("%s%s", key, (nip && S_ISDIR(nip->s.st_mode)) ? "/" : "");
   
   if (S_ISLNK(nip->s.st_mode))
-    printf(" -> %s", nip->d);
+    printf(" -> %s", nip->l);
     
   printf(" [%s", mode2str(nip));
 
@@ -411,7 +694,18 @@ int node_print(const char *key,
   }
   putchar(']');
   putchar('\n');
-  if (f_verbose) {
+  
+  if (f_verbose > 1) {
+    if (f_verbose > 2) {
+      puts("    General:");
+      printf("      Size  = %ld\n", nip->s.st_size);
+      printf("      Uid   = %d\n", nip->s.st_uid);
+      printf("      Gid   = %d\n", nip->s.st_gid);
+      printf("      Atime = %ld\n", nip->s.st_atime);
+      printf("      Ctime = %ld\n", nip->s.st_ctime);
+      printf("      Mtime = %ld\n", nip->s.st_mtime);
+    }
+    
     if (nip->a.nfs) {
       puts("    NFSv4/ZFS ACL:");
       char *t = acl_to_text(nip->a.nfs, NULL);
@@ -441,6 +735,15 @@ int node_print(const char *key,
     if (nip->x.usr && btree_entries(nip->x.usr) > 0) {
       puts("    User Attributes:");
       btree_foreach(nip->x.usr, attr_print, NULL);
+    }
+
+    if (nip->d.len) {
+      int i;
+      printf("    %s Digest:", digest_type2str(f_digest));
+      for (i = 0; i < nip->d.len; i++) {
+	printf("%s%02x", ((i & 15) == 0 ? "\n      " : " "), nip->d.buf[i]);
+      }
+      putchar('\n');
     }
   }
   
@@ -484,27 +787,42 @@ dir_recurse(const char *srcpath,
 }
 
 
-unsigned int
+int
 nodeinfo_compare(NODEINFO *a,
 		 NODEINFO *b) {
-  unsigned int d = 0;
+  int d = 0;
 
+
+  if (!a && !b)
+    return 0;
+  
+  if ((a && !b) || (!a && b))
+    return -1;
+  
   if ((a->s.st_mode & S_IFMT) != (b->s.st_mode & S_IFMT))
     d |= 0x0001;
   
-  if (a->s.st_size != b->s.st_size)
+  if (a->s.st_uid != b->s.st_uid)
     d |= 0x0002;
 
-  if (a->s.st_uid != b->s.st_uid)
+  if (a->s.st_gid != b->s.st_gid)
     d |= 0x0004;
 
-  if (a->s.st_gid != b->s.st_gid)
-    d |= 0x0008;
+  if (S_ISLNK(a->s.st_mode) && S_ISLNK(b->s.st_mode)) {
+    if ((a->l && !b->l) || (!a->l && b->l) || (a->l && b->l && strcmp(a->l, b->l) != 0))
+      d |= 0x0010;
+  }
 
-#if 0
+  if (S_ISREG(a->s.st_mode) && S_ISREG(b->s.st_mode)) {
+    if (a->s.st_size != b->s.st_size)
+      d |= 0x0100;
+  }
+
   if (a->s.st_mtime != b->s.st_mtime)
-    d |= 0x0010;
-#endif
+    d |= 0x1000;
+
+  if (a->s.st_atime != b->s.st_atime)
+    d |= 0x2000;
 
   return d;
 }
@@ -517,36 +835,68 @@ check_new_or_updated(const char *key,
   NODEINFO *src_nip = (NODEINFO *) val;
   NODEINFO *dst_nip = NULL;
   XDATA *xd = (XDATA *) extra;
-  int rc, d;
-
+  char *dstpath = strdupcat(xd->dstpath, "/", key, NULL);
   
   btree_search(xd->dst, key, (void **) &dst_nip);
+
+  
   if (!dst_nip) {
     /* New file or dir */
 
     if (f_verbose) {
       printf("+ %s/", xd->dstpath);
       node_print(key, src_nip, NULL);
+
+      if (f_update) {
+	if (S_ISREG(src_nip->s.st_mode)) {
+	  /* Regular file */
+	  file_copy(src_nip, dstpath);
+	} else if (S_ISDIR(src_nip->s.st_mode)) {
+	  mkdir(dstpath, src_nip->s.st_mode);
+	} else if (S_ISLNK(src_nip->s.st_mode)) {
+	  symlink(src_nip->l, dstpath);
+	} else if (S_ISBLK(src_nip->s.st_mode) || S_ISCHR(src_nip->s.st_mode)) {
+	  mknod(dstpath, src_nip->s.st_mode, src_nip->s.st_dev);
+	}
+      }
     }
     
     if (strcmp(mode2str(src_nip), "d") == 0) {
-      rc = dir_recurse(xd->srcpath, xd->dstpath, key);
+      dir_recurse(xd->srcpath, xd->dstpath, key);
     }
-  } else if ((d = nodeinfo_compare(src_nip, dst_nip)) != 0) {
+
+    /* Update after subdirectory has been traversed to preserve timestamps */
+    if (f_update)
+      node_update(src_nip, dstpath);
+  
+  } else if ((src_nip->s.st_mode & S_IFMT) != (dst_nip->s.st_mode & S_IFMT)) {
+    /* Node changed type */
+    
     if (S_ISDIR(dst_nip->s.st_mode) && !S_ISDIR(src_nip->s.st_mode)) {
       /* Changed from file -> dir */
 
       if (f_verbose) {
 	printf("- %s/", xd->dstpath);
 	node_print(key, dst_nip, NULL);
+	
 	printf("+ %s/", xd->dstpath);
 	node_print(key, src_nip, NULL);
       }
+
+      if (f_update) {
+	unlink(dstpath);
+	mkdir(dstpath, src_nip->s.st_mode);
+      }
       
-      rc = dir_recurse(xd->srcpath, xd->dstpath, key);
+      dir_recurse(xd->srcpath, xd->dstpath, key);
+      
+      /* Update after subdirectory has been traversed to preserve timestamps */
+      if (f_update)
+	node_update(src_nip, dstpath);
+      
     } else if (S_ISDIR(src_nip->s.st_mode) && !S_ISDIR(dst_nip->s.st_mode)) {
       /* Changed from dir -> file */ 
-      rc = dir_recurse(xd->srcpath, xd->dstpath, key);
+      dir_recurse(xd->srcpath, xd->dstpath, key);
 
       if (f_verbose) {
 	printf("- %s/", xd->dstpath);
@@ -554,20 +904,66 @@ check_new_or_updated(const char *key,
 	printf("+ %s/", xd->dstpath);
 	node_print(key, src_nip, NULL);
       }
+
+      if (f_update) {
+	rmdir(dstpath);
+	
+	if (S_ISREG(src_nip->s.st_mode)) {
+	  file_copy(src_nip, dstpath);
+	} else if (S_ISLNK(src_nip->s.st_mode)) {
+	  symlink(src_nip->l, dstpath);
+	} else if (S_ISBLK(src_nip->s.st_mode) || S_ISCHR(src_nip->s.st_mode)) {
+	  mknod(dstpath, src_nip->s.st_mode, src_nip->s.st_dev);
+	}
+
+	node_update(src_nip, dstpath);
+      }
+      
     } else {
+      /* Changed from non-dir to non-dir */
+      
       if (f_verbose) {
-	printf("%d %s/", d, xd->dstpath);
+	printf("* %s/", xd->dstpath);
 	node_print(key, src_nip, NULL);
+      }
+      
+      if (f_update) {
+	unlink(dstpath);
+	
+	if (S_ISREG(src_nip->s.st_mode)) {
+	  file_copy(src_nip, dstpath);
+	} else if (S_ISLNK(src_nip->s.st_mode)) {
+	  symlink(src_nip->l, dstpath);
+	} else if (S_ISBLK(src_nip->s.st_mode) || S_ISCHR(src_nip->s.st_mode)) {
+	  mknod(dstpath, src_nip->s.st_mode, src_nip->s.st_dev);
+	}
+	
+	node_update(src_nip, dstpath);
       }
     }
   } else {
+    /* Object is same type */
+    int d;
+    
     if (strcmp(mode2str(dst_nip), "d") == 0) {
-      rc = dir_recurse(xd->srcpath, xd->dstpath, key);
-    } else {
-      /* Check if file has changed timestamps or content */
+      dir_recurse(xd->srcpath, xd->dstpath, key);
+
+    }
+
+    d = nodeinfo_compare(src_nip, dst_nip);
+    if (d) {
+      if (f_verbose) {
+	printf("! %s/", xd->dstpath);
+	node_print(key, src_nip, NULL);
+      }
+      
+      /* Something is different */
+      if (f_update)
+	node_update(src_nip, dstpath);
     }
   }
   
+  free(dstpath);
   return 0;
 }
 
@@ -581,15 +977,27 @@ check_removed(const char *key,
   XDATA *xd = (XDATA *) extra;
   
   btree_search(xd->src, key, (void **) &src_nip);
+  
   if (!src_nip) {
     /* Object not found in source */
     
-    if (strcmp(mode2str(dst_nip), "d") == 0)
+    if (S_ISDIR(dst_nip->s.st_mode))
       dir_recurse(xd->srcpath, xd->dstpath, key);
 
     if (f_verbose) {
       printf("- %s/", xd->dstpath);
       node_print(key, dst_nip, NULL);
+    }
+
+    if (f_update) {
+      char *dstpath = strdupcat(xd->dstpath, "/", key, NULL);
+
+      if (S_ISDIR(dst_nip->s.st_mode))
+	rmdir(dstpath);
+      else
+	unlink(dstpath);
+      
+      free(dstpath);
     }
   }
   return 0;
@@ -607,13 +1015,15 @@ dir_compare(const char *srcpath,
   dat.dst = dir_load(dstpath);
 
   btree_foreach(dat.src, check_new_or_updated, &dat);
-  btree_foreach(dat.dst, check_removed, &dat);
+
+  if (f_remove)
+    btree_foreach(dat.dst, check_removed, &dat);
 
   btree_destroy(dat.src);
   btree_destroy(dat.dst);
   return 0;
 }
-
+ 
 int
 main(int argc,
      char *argv[]) {
@@ -645,8 +1055,16 @@ main(int argc,
 	++f_recurse;
 	break;
 
-      case 'm':
-	++f_mirror;
+      case 'p':
+	++f_perms;
+	break;
+
+      case 't':
+	++f_times;
+	break;
+
+      case 'x':
+	++f_remove;
 	break;
 
       case 'A':
@@ -661,9 +1079,12 @@ main(int argc,
 	++f_recurse;
 	++f_acls;
 	++f_attrs;
+	++f_perms;
+	++f_times;
 	break;
 
       case 'D':
+	ds = NULL;
 	if (argv[i][j+1])
 	  ds = argv[i]+j+1;
 	else if (argv[i+1])

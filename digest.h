@@ -109,7 +109,7 @@ typedef struct digest {
 
 extern int
 digest_init(DIGEST *dp,
-	    const char *stype);
+	    DIGEST_TYPE type);
 
 extern void
 digest_destroy(DIGEST *dp);
