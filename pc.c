@@ -52,12 +52,12 @@
 #include <sys/acl.h>
 #include <sys/param.h>
 #include <sys/vnode.h>
-#include <sys/extattr.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 
 #include "btree.h"
 #include "digest.h"
+#include "attrs.h"
 
 
 
@@ -74,8 +74,12 @@ typedef struct node {
     acl_t def;		/* POSIX */
   } a;
   struct {
+#ifdef EXTATTR_NAMESPACE_SYSTEM
     BTREE *sys;		/* System Extended Attributes */
+#endif
+#ifdef EXTATTR_NAMESPACE_USER
     BTREE *usr;		/* User Extended Attributes */
+#endif
   } x;
   struct {		/* Content Digest */
     unsigned char buf[DIGEST_BUFSIZE_MAX];
@@ -225,6 +229,9 @@ timespec_compare(struct timespec *a,
 }
 
 
+
+
+
 int
 acl_compare(acl_t a,
 	    acl_t b) {
@@ -238,8 +245,7 @@ acl_compare(acl_t a,
   if (a && !b)
     return -1;
   
-  /* Hack, do a better comparision */
-  
+  /* Hack, do a better/faster comparision */
   as = acl_to_text(a, NULL);
   bs = acl_to_text(b, NULL);
   
@@ -571,7 +577,8 @@ node_update(NODE *src_nip,
 
     aub.fd = -1;
     aub.pn = dstpath;
-    
+
+#ifdef EXTATTR_NAMESPACE_SYSTEM
     if (src_nip->x.sys) {
       aub.ns = EXTATTR_NAMESPACE_SYSTEM;
       aub.attrs = dst_nip->x.sys;
@@ -581,7 +588,8 @@ node_update(NODE *src_nip,
 	btree_foreach(dst_nip->x.sys, attr_remove, &aub);
       }
     }
-    
+#endif
+#ifdef EXTATTR_NAMESPACE_USER
     if (src_nip->x.usr) {
       aub.ns = EXTATTR_NAMESPACE_USER;
       aub.attrs = dst_nip->x.usr;
@@ -591,9 +599,10 @@ node_update(NODE *src_nip,
 	btree_foreach(dst_nip->x.usr, attr_remove, &aub);
       }
     }
+#endif
   }
   
-  if (f_acls) {    /* XXX: Only update if changed */
+  if (f_acls) {
     if (src_nip->a.nfs) {
       if (!dst_nip->a.nfs || acl_compare(src_nip->a.nfs, dst_nip->a.nfs) != 0) {
 	if (acl_set_link_np(dstpath, ACL_TYPE_NFS4, src_nip->a.nfs) < 0) {
@@ -721,8 +730,11 @@ attrs_get(const char *objpath,
     ATTRINFO *ad;
     ssize_t adsize;
 
-    
-    len = *ap++;
+#ifdef __FreeBSD__
+    len = *ap++; /* 1 byte = length */
+#else
+    len = strlen(ap); /* NUL-terminated strings */
+#endif
     an = malloc(len+1);
     if (!an) {
       fprintf(stderr, "%s: Error: %s: malloc(%ld): %s\n",
@@ -732,6 +744,9 @@ attrs_get(const char *objpath,
     memcpy(an, ap, len);
     an[len] = '\0';
     ap += len;
+#ifndef __FreeBSD__
+    ++ap
+#endif
 
     if (is_link)
       adsize = extattr_get_link(objpath, attrnamespace, an, NULL, 0);
@@ -808,10 +823,14 @@ node_free(void *vp) {
   if (nip->a.def)
     acl_free(nip->a.def);
 
+#ifdef EXTATTR_NAMESPACE_SYSTEM
   if (nip->x.sys)
     btree_destroy(nip->x.sys);
+#endif
+#ifdef EXTATTR_NAMESPACE_USER
   if (nip->x.usr)
     btree_destroy(nip->x.usr);
+#endif
 
   memset(nip, 0, sizeof(*nip));
   free(nip);
@@ -856,13 +875,17 @@ node_get(NODE *nip,
     acl_free(nip->a.def); 
   nip->a.def = NULL;
 
+#ifdef EXTATTR_NAMESPACE_SYSTEM
   if (nip->x.sys)
     btree_destroy(nip->x.sys);
   nip->x.sys = NULL;
-
+#endif
+  
+#ifdef EXTATTR_NAMESPACE_USER
   if (nip->x.usr)
     btree_destroy(nip->x.usr);
   nip->x.usr = NULL;
+#endif
   
   nip->d.len = 0;
   
@@ -901,8 +924,12 @@ node_get(NODE *nip,
   }
   
   if (f_attrs) {
+#ifdef EXTATTR_NAMESPACE_SYSTEM
     nip->x.sys = attrs_get(nip->p, S_ISLNK(nip->s.st_mode), EXTATTR_NAMESPACE_SYSTEM);
+#endif
+#ifdef EXTATTR_NAMESPACE_USER
     nip->x.usr = attrs_get(nip->p, S_ISLNK(nip->s.st_mode), EXTATTR_NAMESPACE_USER);
+#endif
   }
 
   if (f_digest && S_ISREG(nip->s.st_mode))
@@ -1172,10 +1199,14 @@ int node_print(const char *key,
       putchar('A');
     if (nip->a.def)
       putchar('D');
+#ifdef EXTATTR_NAMESPACE_SYSTEM
     if (nip->x.sys && btree_entries(nip->x.sys) > 0)
       putchar('S');
+#endif
+#ifdef EXTATTR_NAMESPACE_USER
     if (nip->x.usr && btree_entries(nip->x.usr) > 0)
       putchar('U');
+#endif
   }
   putchar(']');
   if (nip->s.st_flags)
@@ -1215,15 +1246,18 @@ int node_print(const char *key,
 	fputs(t, stdout);
       acl_free(t);
     }
+#ifdef EXTATTR_NAMESPACE_SYSTEM
     if (nip->x.sys && btree_entries(nip->x.sys) > 0) {
       puts("    System Attributes:");
       btree_foreach(nip->x.sys, attr_print, NULL);
     }
+#endif
+#ifdef EXTATTR_NAMESPACE_USER
     if (nip->x.usr && btree_entries(nip->x.usr) > 0) {
       puts("    User Attributes:");
       btree_foreach(nip->x.usr, attr_print, NULL);
     }
-
+#endif
     if (nip->d.len) {
       int i;
       printf("    %s Digest:", digest_type2str(f_digest));
@@ -1416,11 +1450,15 @@ node_compare(NODE *a,
   }
 
   if (f_attrs) {
+#ifdef EXTATTR_NAMESPACE_SYSTEM
     /* Check Extended Attributes */
     if (a->x.sys && attr_compare(a->x.sys, b->x.sys))
       d |= 0x01000000;
+#endif
+#ifdef EXTATTR_NAMESPACE_USER
     if (a->x.usr && attr_compare(a->x.usr, b->x.usr))
       d |= 0x02000000;
+#endif
   }
 
   if (f_flags) {
@@ -2381,7 +2419,7 @@ main(int argc,
 	puts("\nUsage:");
 	puts("  Options may be specified multiple times (-vv), or values may be specified");
 	puts("  (-v2 or --verbose=2). A single '-' ends option parsing. If no Digest is ");
-	puts("  selected then only ctime, mtime & file size will be used to detect file");
+	puts("  selected then only mtime & file size will be used to detect file");
 	puts("  content changes.");
 	printf("\nVersion:\n  %s\n", version);
 	printf("\nAuthor:\n");

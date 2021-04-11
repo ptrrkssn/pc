@@ -1,39 +1,57 @@
-pc/pcp/pct - or something
+pc/pcp/pct - or something...
 
 Peter's Clone Tool
 
-This is a tool similar to cp but with a number of added features like a mirror mode
-(similar to rsync, but only locally), and that it understands ACLs and Extended Attributes.
+This is a tool similar to cp but with a number of added features like a mirror
+mode (inspired by rsync, but only locally). It understands ACLs, Extended
+Attributes & File Flags and tries to avoid/copying files unless it has been
+modified/differs. 
+
 
 USAGE
+  pc [<options>] <src-1> [... <src-N>] <dst>
+
+Options:
+  -h | --help                          Display this information
+  -v | --verbose                       Increase verbosity
+  -d | --debug                         Increase debug level
+  -n | --dry-run                       Do a dry-run (No updates)
+  -f | --force                         Force updates
+  -i | --ignore                        Ignore errors and continue
+  -r | --recurse                       Recurse into subdirectories
+  -p | --preserve                      Check and preserve mode bits
+  -o | --owner                         Check and preserve owner & group
+  -t | --times                         Check mtime (and preserve mtime and atime if '-tt')
+  -x | --expunge                       Remove/replace deleted/changed objects
+  -u | --no-copy                       Do not copy file contents
+  -z | --zero-fill                     Try to generate zero-holed files
+  -A | --acls                          Copy ACLs
+  -X | --attributes                    Copy extended attributes
+  -F | --file-flags                    Copy file flags (and check/update 'uarch' if '-FF')
+  -a | --archive                       Archive mode (equal to '-rpottAXFF')
+  -M | --mirror                        Mirror mode (equal to '-ax')
+  -B | --buffer-size    <size>         Set copy buffer size [131072]
+  -D | --digest         <digest>       Set file content digest algorithm
+
+Digests:
+  NONE, ADLER32, CRC32, MD5, SKEIN256, SHA256, SHA384, SHA512
+
+Usage:
+  Options may be specified multiple times (-vv), or values may be specified
+  (-v2 or --verbose=2). A single '-' ends option parsing. If no Digest is 
+  selected then only mtime & file size will be used to detect file
+  content changes. If source directory is specified as "dir/" then copy contents
+  instead of directory"
+
+
+EXAMPLES
 
   # Dry-run, verbose, mirror-mode
-  pc -n -v -M dir-a/ dir-b
+  pc -n -v -M dir-a/ dest-dir
 
-	printf("  -h             Display this information\n");
-	printf("  -v             Increase verbosity\n");
-	printf("  -d             Increase debugging level\n");
-	printf("  -n             No-update mode\n");
-	printf("  -f             Force-copy mode\n");
-	printf("  -i             Ignore errors and continue\n");
-	printf("  -r             Recurse into subdirectories\n");
-	printf("  -p             Check and preserve permission bits\n");
-	printf("  -o             Check and preserve owner/group\n");
-	printf("  -t             Copy if source mtime is newer\n");
-	printf("  -tt            Copy if source mtime differs and reset on target\n");
-	printf("  -x             Remove/replace deleted/changed objects\n");
-	printf("  -u             Do not update file contents\n");
-	printf("  -z             Generate zero-holed files\n");
-	printf("  -A             Enable ACLs\n");
-	printf("  -X             Enable Extended Attributes\n");
-	printf("  -F             Enable File Flags\n");
-	printf("  -FF            Enable File Flags + UF_ARCHIVE handling\n");
-	printf("  -a             Archive mode (equal to -rpottAXFF)\n");
-	printf("  -M             Mirror mode (equal to -ax)\n");
-	printf("  -B <size>      Set buffer size [%lu]\n", f_bufsize);
-	printf("  -D <digest>    Select file digest algorithm\n");
+  # Verbose, archive-mode, merge dir-a & dir-b contents
+  pc --verbose=2 --archive --digest=SHA256 dir-a/ dir-b/ dest-dir
 
-For details, see "pc --help".
 
 AUTHOR
 

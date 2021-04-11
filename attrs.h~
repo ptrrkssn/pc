@@ -1,0 +1,58 @@
+#if defined(__APPLE__)
+#define EXTATTR_NAMESPACE_SYSTEM 0
+
+ssize_t
+extattr_get_fd(int fd,
+	       int attrnamespace,
+	       const char *attrname,
+	       void *data,
+	       size_t nbytes) {
+  return fgetxattr(fd, attrname, data, nbytes, 0, 0);
+}
+
+ssize_t
+extattr_get_file(int fd,
+		 int attrnamespace,
+		 const char *attrname,
+		 void *data,
+		 size_t nbytes) {
+  return getxattr(fd, attrname, data, nbytes, 0, 0);
+}
+
+ssize_t
+extattr_get_link(int fd,
+		 int attrnamespace,
+		 const char *attrname,
+		 void *data,
+		 size_t nbytes) {
+  return getxattr(fd, attrname, data, nbytes, 0, XATTR_NOFOLLOW);
+}
+
+ssize_t
+extattr_set_fd(int fd,
+	       int attrnamespace,
+	       const char *attrname,
+	       void *data,
+	       size_t nbytes) {
+  return fsetxattr(fd, attrname, data, nbytes, 0, 0);
+}
+
+ssize_t
+extattr_set_file(int fd,
+		 int attrnamespace,
+		 const char *attrname,
+		 void *data,
+		 size_t nbytes) {
+  return setxattr(fd, attrname, data, nbytes, 0, 0);
+}
+
+ssize_t
+extattr_set_link(int fd,
+		 int attrnamespace,
+		 const char *attrname,
+		 void *data,
+		 size_t nbytes) {
+  return setxattr(fd, attrname, data, nbytes, 0, XATTR_NOFOLLOW);
+}
+
+#endif
