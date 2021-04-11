@@ -39,6 +39,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <errno.h>
+#include <ctype.h>
 #include <dirent.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -60,75 +61,50 @@
 
 
 
-typedef struct nodeinfo {
-  char *p;
-  struct stat s;
-  char *l;
+/* 
+ * Node information
+ */
+typedef struct node {
+  char *p;		/* Path to node */
+  struct stat s;	/* Stat info */
+  char *l;		/* Symbolic link content */
   struct {
-    acl_t nfs; /* NFSv4 / ZFS */
-    acl_t acc; /* POSIX */
-    acl_t def; /* POSIX */
+    acl_t nfs;		/* NFSv4 / ZFS */
+    acl_t acc;		/* POSIX */
+    acl_t def;		/* POSIX */
   } a;
   struct {
-    BTREE *sys;
-    BTREE *usr;
+    BTREE *sys;		/* System Extended Attributes */
+    BTREE *usr;		/* User Extended Attributes */
   } x;
-  struct {
+  struct {		/* Content Digest */
     unsigned char buf[DIGEST_BUFSIZE_MAX];
     size_t len;
   } d;
-} NODEINFO;
+} NODE;
 
 
-char *argv0 = "pc";
-char *version = "0.1";
-
-int f_verbose = 0;
-int f_debug   = 0;
-int f_update  = 1;
-int f_force   = 0;
-int f_recurse = 0;
-int f_remove  = 0;
-int f_content = 1;
-int f_zero    = 0;
-int f_perms   = 0;
-int f_times   = 0;
-int f_acls    = 0;
-int f_attrs   = 0;
-int f_digest  = 0;
+/*
+ * Directory contents
+ */
+typedef struct dirnode {
+  char *path;		/* Path to directory */
+  BTREE *nodes;		/* Nodes in directory */
+} DIRNODE;
 
 
-char *
-strdupcat(const char *str,
-	  ...) {
-  va_list ap;
-  char *retval, *res, *cp;
-  size_t reslen = strlen(str)+1;
-  
-  va_start(ap, str);
-  while ((cp = va_arg(ap, char *)) != NULL)
-    reslen += strlen(cp);
-  va_end(ap);
-  
-  retval = res = malloc(reslen);
-  if (!res)
-    return NULL;
+/*
+ * Directory pairs
+ */
+typedef struct dirpair {
+  DIRNODE *src;
+  DIRNODE *dst;
+} DIRPAIR;
 
-  strcpy(res, str);
-  while (*res)
-    ++res;
-  
-  va_start(ap, str);
-  while ((cp = va_arg(ap, char *)) != NULL) {
-    strcpy(res, cp);
-    while (*res)
-      ++res;
-  }
-  va_end(ap);
 
-  return retval;
-}
-
+/* 
+ * Extended Attributes 
+ */
 typedef struct attrinfo {
   size_t len;
   unsigned char buf[];
@@ -138,23 +114,152 @@ typedef struct attrupdate {
   int fd;
   int ns;
   const char *pn;
+  BTREE *attrs;
 } ATTRUPDATE;
 
-int
-attr_update(const char *key,
-	    void *vp,
-	    void *xp) {
-  ATTRINFO   *aip = (ATTRINFO *) vp;
-  ATTRUPDATE *aup = (ATTRUPDATE *) xp;
 
-  if (aup->pn)
-    return extattr_set_link(aup->pn, aup->ns, key, aip->buf, aip->len);
 
-  return extattr_set_fd(aup->fd, aup->ns, key, aip->buf, aip->len);
+
+char *argv0 = "pc";
+char *version = "0.3";
+
+int f_verbose = 0;
+int f_debug   = 0;
+int f_update  = 1;
+int f_force   = 0;
+int f_ignore  = 0;
+int f_recurse = 0;
+int f_remove  = 0;
+int f_content = 1;
+int f_zero    = 0;
+int f_perms   = 0;
+int f_owner   = 0;
+int f_times   = 0;
+int f_acls    = 0;
+int f_attrs   = 0;
+int f_flags   = 0; /* Check file flags, special UF_ARCHIVE handling if > 1 */
+int f_digest  = 0; /* Generate and check a content digest for files */
+size_t f_bufsize = 128*1024;
+
+gid_t gidsetv[NGROUPS_MAX+1];
+int gidsetlen = 0;
+
+
+static inline int
+in_gidset(gid_t g) {
+  int i;
+
+  for (i = 0; i < gidsetlen; i++)
+    if (gidsetv[i] == g)
+      return 1;
+
+  return 0;
 }
 
+/* 
+ * Concatenate the list of strings (and at first NULL) into a dynamically allocated buffer
+ */
+char *
+strdupcat(const char *str,
+	  ...) {
+  va_list ap;
+  char *retval, *res;
+  const char *cp;
+  size_t reslen;
+
+  /* Get the length of the first string, plus 1 for ending NUL */
+  reslen = strlen(str)+1;
+
+  /* Add length of the other strings */
+  va_start(ap, str);
+  while ((cp = va_arg(ap, char *)) != NULL)
+    reslen += strlen(cp);
+  va_end(ap);
+
+  /* Allocate storage */
+  retval = res = malloc(reslen);
+  if (!retval)
+    return NULL;
+
+  /* Get the first string */
+  cp = str;
+  while (*cp)
+    *res++ = *cp++;
+  
+  /* And then append the rest */
+  va_start(ap, str);
+  while ((cp = va_arg(ap, char *)) != NULL) {
+    while (*cp)
+      *res++ = *cp++;
+  }
+  va_end(ap);
+
+  /* NUL-terminate the string */
+  *res = '\0';
+  return retval;
+}
+
+
+
+/*
+ * Compare two timespec structures
+ * Returns: -1 if a < b, 1 if a > b, and 0 if equal
+ */
 int
-file_digest(NODEINFO *nip) {
+timespec_compare(struct timespec *a,
+		 struct timespec *b) {
+  if (a->tv_sec == b->tv_sec) {
+    if (a->tv_nsec < b->tv_nsec)
+      return -1;
+    if (a->tv_nsec > b->tv_nsec)
+      return 1;
+    return 0;
+  }
+
+  if (a->tv_sec < b->tv_sec)
+    return -1;
+  if (a->tv_sec > b->tv_sec)
+    return 1;
+
+  return 0;
+}
+
+
+int
+acl_compare(acl_t a,
+	    acl_t b) {
+  char *as, *bs;
+  int rc = 0;
+
+  
+  if (!a && b)
+    return -1;
+
+  if (a && !b)
+    return -1;
+  
+  /* Hack, do a better comparision */
+  
+  as = acl_to_text(a, NULL);
+  bs = acl_to_text(b, NULL);
+  
+  if (strcmp(as, bs) != 0)
+    rc = 1;
+  
+  acl_free(as);
+  acl_free(bs);
+
+  return rc;
+  
+}
+
+
+
+/*
+ * Calculate a digest checksum for a file
+ */
+int
+file_digest(NODE *nip) {
   unsigned char buf[128*1024];
   ssize_t len;
   int fd;
@@ -178,6 +283,9 @@ file_digest(NODEINFO *nip) {
 }
 
 
+/*
+ * Check if a buffer contains just NUL (0x00) bytes
+ */
 static inline int
 buffer_zero_check(char *buf,
 	   size_t len) {
@@ -188,9 +296,13 @@ buffer_zero_check(char *buf,
 }
 
 
+/*
+ * Copy file contents
+ */
 int
-file_copy(NODEINFO *src_nip,
-	  const char *dstpath) {
+file_copy(const char *srcpath,
+	  const char *dstpath,
+	  mode_t mode) {
   off_t sbytes, tbytes;
   int src_fd = -1, dst_fd = -1, rc = -1;
   int holed = 0;
@@ -203,139 +315,152 @@ file_copy(NODEINFO *src_nip,
 #endif
 
   
-  if (S_ISREG(src_nip->s.st_mode)) {
-    src_fd = open(src_nip->p, O_RDONLY);
-    if (src_fd < 0) {
-      fprintf(stderr, "open(%s, O_RDONLY): %s\n", src_nip->p, strerror(errno));
-      rc = -1;
-      goto End;
-    }
-    
-    dst_fd = open(dstpath, O_WRONLY|O_CREAT|O_TRUNC, src_nip->s.st_mode);
-    if (dst_fd < 0) {
-      fprintf(stderr, "open(%s, O_WRONLY|O_CREAT): %s\n", dstpath, strerror(errno));
-      rc = -1;
-      goto End;
-    }
-    
-    sbytes = 0;
-    tbytes = 0;
+  src_fd = open(srcpath, O_RDONLY);
+  if (src_fd < 0) {
+    fprintf(stderr, "%s: Error: %s: open(O_RDONLY): %s\n",
+	    argv0, srcpath, strerror(errno));
+    rc = -1;
+    goto End;
+  }
+  
+  dst_fd = open(dstpath, O_WRONLY|O_CREAT|O_TRUNC, mode);
+  if (dst_fd < 0) {
+    fprintf(stderr, "%s: Error: %s: open(O_WRONLY|O_CREAT, 0x%x): %s\n",
+	    argv0, dstpath, mode, strerror(errno));
+    rc = -1;
+    goto End;
+  }
+  
+  sbytes = 0;
+  tbytes = 0;
 #if USE_AIO
-    /* Start first read */
-    memset(&cb, 0, sizeof(cb));
-    cb[0].aio_fildes = src_fd;
-    cb[1].aio_fildes = src_fd;
-    cb[0].aio_buf = bufv[0];
-    cb[1].aio_buf = bufv[1];
-    cb[0].aio_nbytes = sizeof(bufv[ap]);
-    cb[1].aio_nbytes = sizeof(bufv[ap]);
+  /* Start first read */
+  memset(&cb, 0, sizeof(cb));
+  cb[0].aio_fildes = src_fd;
+  cb[1].aio_fildes = src_fd;
+  cb[0].aio_buf = bufv[0];
+  cb[1].aio_buf = bufv[1];
+  cb[0].aio_nbytes = sizeof(bufv[ap]);
+  cb[1].aio_nbytes = sizeof(bufv[ap]);
+  
+  ap = 0;
+  cb[ap].aio_offset = 0;
+  if (aio_read(&cb[ap]) < 0) {
+    fprintf(stderr, "%s: Error: %s: aio_read(): %s\n", argv0, srcpath, strerror(errno));
+    exit(1);
+  }
+  
+  cbp = NULL;
+  while ((rc = aio_waitcomplete(&cbp, NULL)) > 0) {
+    sbytes = rc;
     
-    ap = 0;
-    cb[ap].aio_offset = 0;
+    /* Start next read immediately in order to keep interleave reading & writing */
+    ap = !ap;
+    cb[ap].aio_offset = tbytes+sbytes;
     if (aio_read(&cb[ap]) < 0) {
       fprintf(stderr, "%s: Error: aio_read(): %s\n", argv0, strerror(errno));
       exit(1);
     }
-
-    cbp = NULL;
-    while ((rc = aio_waitcomplete(&cbp, NULL)) > 0) {
-      sbytes = rc;
-      
-      /* Start next read immediately in order to keep interleave reading & writing */
-      ap = !ap;
-      cb[ap].aio_offset = tbytes+sbytes;
-      if (aio_read(&cb[ap]) < 0) {
-	fprintf(stderr, "%s: Error: aio_read(): %s\n", argv0, strerror(errno));
-	exit(1);
-      }
-
-      if (f_zero && sbytes && buffer_zero_check((char *) cbp->aio_buf, sbytes)) {
-        holed = 1;
-	rc = lseek(dst_fd, sbytes, SEEK_CUR);
-	if (rc < 0) {
-	  fprintf(stderr, "%s: Error: lseek(%s, ..., %ld): %s\n", argv0, dstpath, sbytes, strerror(errno));
-	  rc = -1;
-	  goto End;
-	}
-      }
-      else {
-	rc = write(dst_fd, (const void *) cbp->aio_buf, sbytes);
-	if (rc < 0) {
-	  fprintf(stderr, "%s: Error: write(%s, ..., %ld): %s\n", argv0, dstpath, sbytes, strerror(errno));
-	  rc = -1;
-	  goto End;
-	}
-      }
-
-      tbytes += sbytes;
-      if (f_verbose > 1)
-	printf("  %ld bytes copied\r", tbytes);
-      
-      cbp = NULL;
-    }
-#elif USE_SENDFILE
-    while ((rc = sendfile(src_fd, dst_fd, tbytes, SENDFILE_BUFSIZE, NULL, &sbytes, SF_NOCACHE)) > 0 ||
-	   errno == EAGAIN) {
-      tbytes += sbytes;
-      if (f_verbose > 1)
-	printf("  %ld bytes copied\r", tbytes);
-      sbytes = 0;
-    }
-    if (rc < 0) {
-      fprintf(stderr, "sendfile(%s,%s): %s\n", src_nip->p, dstpath, strerror(errno));
-      rc = -1;
-      goto End;
-    }
-#else
-    while ((sbytes = read(src_fd, buf, sizeof(buf))) > 0) {
-      if (f_zero && buffer_zero_check(buf, sbytes)) {
-        holed = 1;
-	rc = lseek(dst_fd, sbytes, SEEK_CUR);
-	if (rc < 0) {
-	  fprintf(stderr, "%s: Error: lseek(%s, ..., %ld): %s\n", argv0, dstpath, sbytes, strerror(errno));
-	  rc = -1;
-	  goto End;
-	}
-      }
-      else {
-	rc = write(dst_fd, buf, sbytes);
-	if (rc < 0) {
-	  fprintf(stderr, "%s: Error: write(%s, ..., %ld): %s\n", argv0, dstpath, sbytes, strerror(errno));
-	  rc = -1;
-	  goto End;
-	}
-      }
-      tbytes += sbytes;
-      if (f_verbose > 1)
-	printf("  %ld bytes copied\r", tbytes);
-    }
-    rc = sbytes;
-#endif
-    if (holed) {
-      /* Must write atleast one byte at the end of the file */
-      char z = 0;
-      
-      if (lseek(dst_fd, -1, SEEK_CUR) < 0) {
-	fprintf(stderr, "lseek(%s, -1, SEEK_CUR): %s\n", dstpath, strerror(errno));
-	rc = -1;
-	goto End;
-      }
-      if (write(dst_fd, &z, 1) < 0) {
-	fprintf(stderr, "write(%s, NUL, 1): %s\n", dstpath, strerror(errno));
+    
+    if (f_zero && sbytes && buffer_zero_check((char *) cbp->aio_buf, sbytes)) {
+      holed = 1;
+      rc = lseek(dst_fd, sbytes, SEEK_CUR);
+      if (rc < 0) {
+	fprintf(stderr, "%s: Error: %s: lseek(%ld): %s\n", argv0, dstpath, sbytes, strerror(errno));
 	rc = -1;
 	goto End;
       }
     }
-    if (rc < 0) {
-      fprintf(stderr, "write(%s): %s\n", dstpath, strerror(errno));
-      rc = -1;
-      goto End;
+    else {
+      rc = write(dst_fd, (const void *) cbp->aio_buf, sbytes);
+      if (rc < 0) {
+	fprintf(stderr, "%s: Error: %s: write(%ld): %s\n", argv0, dstpath, sbytes, strerror(errno));
+	rc = -1;
+	goto End;
+      }
     }
     
     tbytes += sbytes;
     if (f_verbose > 1)
-      printf("  %ld bytes copied\n", tbytes);
+      printf("  %ld bytes copied\r", tbytes);
+    
+    cbp = NULL;
   }
+  if (rc < 0) {
+    fprintf(stderr, "%s: Error: %s: aio_waitcomplete: %s\n", srcpath, strerror(errno));
+    rc = -1;
+    goto End;
+  }
+#elif USE_SENDFILE
+  while ((rc = sendfile(src_fd, dst_fd, tbytes, SENDFILE_BUFSIZE, NULL, &sbytes, SF_NOCACHE)) > 0 ||
+	 errno == EAGAIN) {
+    tbytes += sbytes;
+    if (f_verbose > 1)
+      printf("  %ld bytes copied\r", tbytes);
+    sbytes = 0;
+  }
+  if (rc < 0) {
+    fprintf(stderr, "%s: Error: %s -> %s: sendfile: %s\n", srcpath, dstpath, strerror(errno));
+    rc = -1;
+    goto End;
+  }
+#else
+  while ((rc = read(src_fd, buf, sizeof(buf))) > 0) {
+    sbytes = rc;
+    if (f_zero && buffer_zero_check(buf, sbytes)) {
+      holed = 1;
+      rc = lseek(dst_fd, sbytes, SEEK_CUR);
+      if (rc < 0) {
+	fprintf(stderr, "%s: Error: %s: lseek(%ld): %s\n",
+		argv0, dstpath, sbytes, strerror(errno));
+	rc = -1;
+	goto End;
+      }
+    }
+    else {
+      rc = write(dst_fd, buf, sbytes);
+      if (rc < 0) {
+	fprintf(stderr, "%s: Error: %s: write(%ld): %s\n",
+		argv0, dstpath, sbytes, strerror(errno));
+	rc = -1;
+	goto End;
+      }
+    }
+    tbytes += sbytes;
+    if (f_verbose > 1)
+      printf("  %ld bytes copied\r", tbytes);
+  }
+  if (rc < 0) {
+    fprintf(stderr, "%s: Error: %s: read(): %s\n",
+	    argv0, srcpath, strerror(errno));
+    rc = -1;
+    goto End;
+  }
+
+  rc = sbytes;
+#endif
+  
+  if (holed) {
+    /* Must write atleast one byte at the end of the file */
+    char z = 0;
+    
+    if (lseek(dst_fd, -1, SEEK_CUR) < 0) {
+      fprintf(stderr, "%s: Error: %s: lseek(-1, SEEK_CUR): %s\n",
+	      argv0, dstpath, strerror(errno));
+      rc = -1;
+      goto End;
+    }
+    if (write(dst_fd, &z, 1) < 0) {
+      fprintf(stderr, "%s: Error: %s: write(NUL, 1): %s\n",
+	      argv0, dstpath, strerror(errno));
+      rc = -1;
+      goto End;
+    }
+  }
+  
+  tbytes += sbytes;
+  if (f_verbose > 1)
+    printf("  %ld bytes copied\n", tbytes);
   
  End:
   if (dst_fd >= 0)
@@ -347,80 +472,200 @@ file_copy(NODEINFO *src_nip,
 }
 
 
+
+/*
+ * Update Extended Attributes
+ */
 int
-node_update(NODEINFO *src_nip,
+attr_update(const char *key,
+	    void *vp,
+	    void *xp) {
+  ATTRINFO   *aip = (ATTRINFO *) vp;
+  ATTRINFO   *bip = NULL;
+  ATTRUPDATE *aup = (ATTRUPDATE *) xp;
+
+  
+  /* Does the attribute exist in the destination node? */
+  if (aup->attrs && !f_force) {
+    btree_search(aup->attrs, key, (void **) &bip);
+    if (bip && bip->len == aip->len && memcmp(bip->buf, aip->buf, bip->len) == 0)
+      return 0; /* Already exists, and is identical */
+  }
+  
+  if (aup->pn)
+    return extattr_set_link(aup->pn, aup->ns, key, aip->buf, aip->len);
+
+  return extattr_set_fd(aup->fd, aup->ns, key, aip->buf, aip->len);
+}
+
+int
+attr_remove(const char *key,
+	    void *vp,
+	    void *xp) {
+  ATTRINFO   *aip = NULL;
+  ATTRUPDATE *aup = (ATTRUPDATE *) xp;
+
+  if (f_debug)
+    fprintf(stderr, "attr_remove(%s)\n", key);
+	    
+  /* Does the attribute exist in the source node? */
+  if (aup->attrs) {
+    btree_search(aup->attrs, key, (void **) &aip);
+    if (aip) {
+      if (f_debug)
+	fprintf(stderr, "attr_remove(%s): found in source, not deleting\n", key);
+      return 0;
+    }
+  }
+  
+  /* Nope - so delete it */
+  if (aup->pn)
+    return extattr_delete_link(aup->pn, aup->ns, key);
+  
+  return extattr_delete_fd(aup->fd, aup->ns, key);
+}
+
+
+
+/*
+ * Update node metadata 
+ */
+int
+node_update(NODE *src_nip,
+	    NODE *dst_nip,
 	    const char *dstpath) {
   int rc = 0;
+
   
-  if (f_perms) {
-    if (f_perms > 1) {
+  if (f_owner) {
+    if (!dst_nip ||
+	src_nip->s.st_uid != dst_nip->s.st_uid ||
+	src_nip->s.st_gid != dst_nip->s.st_gid) {
       if (src_nip->s.st_uid == getuid() || geteuid() == 0) {
 	if (lchown(dstpath, src_nip->s.st_uid, src_nip->s.st_gid) < 0 && errno != EPERM) {
 	  fprintf(stderr, "%s: Error: %s: lchown: %s\n",
 		  argv0, dstpath, strerror(errno));
 	  rc = -1;
+	  if (!f_ignore)
+	    return rc;
 	}
       }
     }
-    
+  }
+
+  if (f_perms) {
     /* Must be done after lchown() in case it clears setuid/setgid bits */
-    if (lchmod(dstpath, src_nip->s.st_mode) < 0) {
-      fprintf(stderr, "%s: Error: %s: lchmod: %s\n",
-	      argv0, dstpath, strerror(errno));
-      rc = -1;
+    if (!dst_nip || src_nip->s.st_mode != dst_nip->s.st_mode) {
+      if (lchmod(dstpath, src_nip->s.st_mode) < 0) {
+	fprintf(stderr, "%s: Error: %s: lchmod: %s\n",
+		argv0, dstpath, strerror(errno));
+	rc = -1;
+	if (!f_ignore)
+	  return rc;
+      }
     }
   }
-  
+
   if (f_attrs) {
     ATTRUPDATE aub;
-    
+
     aub.fd = -1;
     aub.pn = dstpath;
     
     if (src_nip->x.sys) {
       aub.ns = EXTATTR_NAMESPACE_SYSTEM;
+      aub.attrs = dst_nip->x.sys;
       btree_foreach(src_nip->x.sys, attr_update, &aub);
+      if (f_remove && src_nip->x.sys) {
+	aub.attrs = src_nip->x.sys;
+	btree_foreach(dst_nip->x.sys, attr_remove, &aub);
+      }
     }
     
     if (src_nip->x.usr) {
       aub.ns = EXTATTR_NAMESPACE_USER;
+      aub.attrs = dst_nip->x.usr;
       btree_foreach(src_nip->x.usr, attr_update, &aub);
+      if (f_remove && dst_nip->x.usr) {
+	aub.attrs = src_nip->x.usr;
+	btree_foreach(dst_nip->x.usr, attr_remove, &aub);
+      }
     }
   }
   
-  if (f_acls) {
+  if (f_acls) {    /* XXX: Only update if changed */
     if (src_nip->a.nfs) {
-      if (acl_set_link_np(dstpath, ACL_TYPE_NFS4, src_nip->a.nfs) < 0) {
-	fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_NFS4): %s\n",
-		argv0, dstpath, strerror(errno));
-	rc = -1;
+      if (!dst_nip->a.nfs || acl_compare(src_nip->a.nfs, dst_nip->a.nfs) != 0) {
+	if (acl_set_link_np(dstpath, ACL_TYPE_NFS4, src_nip->a.nfs) < 0) {
+	  fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_NFS4): %s\n",
+		  argv0, dstpath, strerror(errno));
+	  rc = -1;
+	  if (!f_ignore)
+	    return rc;
+	}
       }
     }
     if (src_nip->a.acc) {
-      if (acl_set_link_np(dstpath, ACL_TYPE_ACCESS, src_nip->a.acc) < 0) {
-	fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_ACCESS): %s\n",
-		argv0, dstpath, strerror(errno));
-	rc = -1;
+      if (!dst_nip->a.acc || acl_compare(src_nip->a.acc, dst_nip->a.acc) != 0) {
+	if (acl_set_link_np(dstpath, ACL_TYPE_ACCESS, src_nip->a.acc) < 0) {
+	  fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_ACCESS): %s\n",
+		  argv0, dstpath, strerror(errno));
+	  rc = -1;
+	  if (!f_ignore)
+	    return rc;
+	}
       }
     }
     if (src_nip->a.def) {
-      if (acl_set_link_np(dstpath, ACL_TYPE_DEFAULT, src_nip->a.def) < 0) {
-	fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_DEFAULT): %s\n",
-		argv0, dstpath, strerror(errno));
-	rc = -1;
+      if (!dst_nip->a.def || acl_compare(src_nip->a.def, dst_nip->a.def) != 0) {
+	if (acl_set_link_np(dstpath, ACL_TYPE_DEFAULT, src_nip->a.def) < 0) {
+	  fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_DEFAULT): %s\n",
+		  argv0, dstpath, strerror(errno));
+	  rc = -1;
+	  if (!f_ignore)
+	    return rc;
+	}
       }
     }
   }
   
   if (f_times > 1) {
     struct timespec times[2];
+
+    if (!dst_nip ||
+	timespec_compare(&src_nip->s.st_mtim, &dst_nip->s.st_mtim) ||
+	timespec_compare(&src_nip->s.st_atim, &dst_nip->s.st_atim)) {
+      times[0] = src_nip->s.st_atim;
+      times[1] = src_nip->s.st_mtim;
+      if (utimensat(AT_FDCWD, dstpath, times, AT_SYMLINK_NOFOLLOW) < 0) {
+	fprintf(stderr, "%s: Error: utimensat(%s): %s\n",
+		argv0, dstpath, strerror(errno));
+	rc = -1;
+	if (!f_ignore)
+	  return rc;
+      }
+    }
+  }
+  
+  if (f_flags) {
+    if (!dst_nip || (src_nip->s.st_flags & ~UF_ARCHIVE) != (dst_nip->s.st_flags & ~UF_ARCHIVE)) {
+      if (lchflags(dstpath, src_nip->s.st_flags) < 0) {
+	fprintf(stderr, "%s: Error: %s: lchflags: %s\n",
+		argv0, dstpath, strerror(errno));
+	rc = -1;
+	if (!f_ignore)
+	  return rc;
+      }
+    }
     
-    times[0] = src_nip->s.st_atim;
-    times[1] = src_nip->s.st_mtim;
-    if (utimensat(AT_FDCWD, dstpath, times, AT_SYMLINK_NOFOLLOW) < 0) {
-      fprintf(stderr, "%s: Error: utimensat(%s): %s\n",
-	      argv0, dstpath, strerror(errno));
-      rc = -1;
+    if (f_flags > 1 && (src_nip->s.st_flags & UF_ARCHIVE)) {
+      if (lchflags(src_nip->p, src_nip->s.st_flags & ~UF_ARCHIVE) < 0) {
+	fprintf(stderr, "%s: Error: %s: lchflags: %s\n",
+		argv0, src_nip->p, strerror(errno));
+	rc = -1;
+	if (!f_ignore)
+	  return rc;
+      }
     }
   }
   
@@ -429,6 +674,9 @@ node_update(NODEINFO *src_nip,
 
 
 
+/*
+ * Get all Extended Attributes from a node
+ */
 BTREE *
 attrs_get(const char *objpath,
 	  int is_link,
@@ -522,9 +770,12 @@ attrs_get(const char *objpath,
 }
 
 
-NODEINFO *
-nodeinfo_alloc(void) {
-  NODEINFO *nip = malloc(sizeof(*nip));
+/*
+ * Allocate an empty node
+ */
+NODE *
+node_alloc(void) {
+  NODE *nip = malloc(sizeof(*nip));
 
   if (!nip)
     return NULL;
@@ -534,9 +785,12 @@ nodeinfo_alloc(void) {
 }
 
 
+/*
+ * Free node data
+ */
 void
-nodeinfo_free(void *vp) {
-  NODEINFO *nip = (NODEINFO *) vp;
+node_free(void *vp) {
+  NODE *nip = (NODE *) vp;
 
   if (!nip)
     return;
@@ -563,17 +817,24 @@ nodeinfo_free(void *vp) {
   free(nip);
 }
 
+
+/*
+ * Get node metadata
+ */
 int
-nodeinfo_get(NODEINFO *nip,
-	     const char *path,
-	     const char *file) {
-  if (path) {
-    if (file)
-      nip->p = strdupcat(path, "/", file, NULL);
-    else
-      nip->p = strdup(path);
-  }
+node_get(NODE *nip,
+	 const char *path) {
+  if (f_debug)
+    fprintf(stderr, "*** node_get(%s, %s)\n",
+	    nip->p ? nip->p : "<null>",
+	    path ? path : "<null>");
   
+  if (path) {
+    if (nip->p)
+      free(nip->p);
+    nip->p = strdup(path);
+  }
+
   if (!nip->p) {
     errno = EINVAL;
     return -1;
@@ -650,53 +911,162 @@ nodeinfo_get(NODEINFO *nip,
   return 0;
 }
 
-  
-BTREE *
-dir_load(const char *path) {
-  BTREE *bp = btree_create(NULL, nodeinfo_free);
-  DIR *dp;
-  struct dirent *dep;
+
+/*
+ * Allocate empty directory node
+ */
+DIRNODE *
+dirnode_alloc(const char *path) {
+  DIRNODE *dnp;
   
 
-  if (!path)
-    return bp;
-  
-  dp = opendir(path);
-  if (!dp) {
-    NODEINFO *nip = nodeinfo_alloc();
+  dnp = malloc(sizeof(*dnp));
+  if (!dnp)
+    abort();
 
-    if (nodeinfo_get(nip, path, NULL) < 0) {
-      nodeinfo_free(nip);
-      return NULL;
-    }
-    
-    btree_insert(bp, strdup(path), nip);
-    return bp;
+  memset(dnp, 0, sizeof(*dnp));
+
+  if (path) {
+    dnp->path = strdup(path);
   }
+  
+  dnp->nodes = btree_create(NULL, node_free);
 
-  while ((dep = readdir(dp)) != NULL) {
-    if (strcmp(dep->d_name, ".") != 0 &&
-	strcmp(dep->d_name, "..") != 0) {
-      NODEINFO *nip = nodeinfo_alloc();
-
-      if (nodeinfo_get(nip, path, dep->d_name) < 0) {
-	fprintf(stderr, "%s: Error: %s/%s: %s\n", argv0, path, dep->d_name, strerror(errno));
-	nodeinfo_free(nip);
-	exit(1);
-      }
-      
-      btree_insert(bp, strdup(dep->d_name), (void *) nip);
-    }
-  }
-
-  closedir(dp);
-  return bp;
+  return dnp;
 }
 
 
+/*
+ * Free directory node data
+ */
+void
+dirnode_free(DIRNODE *dnp) {
+  if (dnp->nodes) {
+    btree_destroy(dnp->nodes);
+    dnp->nodes = NULL;
+  }
+  if (dnp->path) {
+    free((void *) dnp->path);
+    dnp->path = NULL;
+  }
+  free(dnp);
+}
 
+
+/*
+ * Add node or directory contents to a directory ndoe
+ *
+ * 1. path/dir/ 
+ *    add contents of 'dir' to DIRNODE
+ * 2. path/node
+ *    add 'node' to DIRNODE
+ */
+int
+dirnode_add(DIRNODE *dnp,
+	    const char *path,
+	    int dir_contents_f) {
+  DIR *dp;
+  struct dirent *dep;
+  int len, rc;
+  int n_trail;
+  char *pbuf, *dirname, *nodename;
+  
+
+  pbuf = strdup(path);
+  len = strlen(pbuf);
+
+  /* Remove and count trailing '/' */
+  n_trail = 0;
+  while (len > 0 && pbuf[len-1] == '/') {
+    ++n_trail;
+    --len;
+  }
+  pbuf[len--] = '\0';
+
+  while (len >= 0 && pbuf[len] != '/')
+    --len;
+  if (len < 0) {
+    dirname = strdup(".");
+    nodename = pbuf;
+  } else {
+    if (len == 0)
+      len = 1;
+    dirname = strndup(pbuf, len);
+    nodename = pbuf+len+1;
+  }
+  
+  if (dir_contents_f || n_trail > 0) {
+    dp = opendir(pbuf);
+    if (!dp)
+      return -1;
+    
+    if (dp) {
+      while ((dep = readdir(dp)) != NULL) {
+	if (strcmp(dep->d_name, ".") != 0 &&
+	    strcmp(dep->d_name, "..") != 0) {
+	  char *tmppath = strdupcat(pbuf, "/", dep->d_name, NULL);
+	  NODE *nip = node_alloc();
+
+	  if (node_get(nip, tmppath) < 0) {
+	    if (f_verbose)
+	      fprintf(stderr, "%s: Error: %s: node_get: %s\n", argv0, tmppath, strerror(errno));
+	    free(tmppath);
+	    node_free(nip);
+	    return -1;
+	  }
+	  
+	  if (btree_insert(dnp->nodes, strdup(dep->d_name), (void *) nip) < 0) {
+	    if (f_ignore && errno == EEXIST) {
+	      if (f_verbose)
+		fprintf(stderr, "%s: Ignoring duplicate node name\n", tmppath);
+	    } else {
+	      fprintf(stderr, "%s: Error: %s: btree_insert: %s\n",
+		      argv0, tmppath, strerror(errno));
+	      exit(1);
+	    }
+	  }
+
+	  free(tmppath);
+	}
+      }
+    }
+    
+    closedir(dp);
+  } else {
+    NODE *nip = node_alloc();
+
+    rc = node_get(nip, path);
+    if (rc < 0) {
+      if (f_debug)
+	fprintf(stderr, "%s: Error: %s: node_get: %s\n", argv0, path, strerror(errno));
+      node_free(nip);
+      return -1;
+    }
+    
+    rc = btree_insert(dnp->nodes, strdup(nodename), (void *) nip);
+    if (rc < 0) {
+      if (f_ignore && errno == EEXIST) {
+	if (f_verbose)
+	  fprintf(stderr, "%s: Ignoring duplicate node name\n", path);
+      } else {
+	fprintf(stderr, "%s: Error: %s: btree_insert: %s\n",
+		argv0, path, strerror(errno));
+	return rc;
+      }
+    }
+  }
+
+  free(dirname);
+  free(pbuf);
+  return 0;
+}
+
+
+/*
+ * Return a string representing the node type
+ */
 char *
-mode2str(NODEINFO *nip) {
+mode2str(NODE *nip) {
   struct stat *sp;
 
   if (!nip)
@@ -733,12 +1103,46 @@ mode2str(NODEINFO *nip) {
   return "?";
 }
 
+
+int
+is_printable(const unsigned char *buf,
+	     size_t len) {
+  int i;
+
+  for (i = 0; i < len && isprint(buf[i]); i++)
+    ;
+  
+  return i < len ? 0 : 1;
+}
+
+
+int
+print_hex(const unsigned char *buf,
+	  size_t len) {
+  int i;
+
+  for (i = 0; i < len; i++)
+    printf("%s%02x", i ? " " : "", buf[i]);
+
+  return 0;
+}
+
+
+/*
+ * Print Extended Attribute
+ */
 int attr_print(const char *key,
 	       void *val,
 	       void *extra) {
   ATTRINFO *aip = (ATTRINFO *) val;
 
-  printf("      %s = %s\n", key, aip->buf);
+  printf("      %s = ", key);
+  if (is_printable(aip->buf, aip->len))
+    printf("\"%s\"\n", aip->buf);
+  else {
+    print_hex(aip->buf, aip->len);
+    puts(" [hex]");
+  }
   return 0;
 }
 
@@ -746,13 +1150,15 @@ int attr_print(const char *key,
 int node_print(const char *key,
 	       void *val,
 	       void *extra) {
-  NODEINFO *nip = (NODEINFO *) val;
+  NODE *nip = (NODE *) val;
   int verbose = 0;
 
   if (extra)
     verbose = * (int *) extra;
   
-  printf("%s%s", key, (nip && S_ISDIR(nip->s.st_mode)) ? "/" : "");
+  printf("%s%s",
+	 key ? nip->p : "",
+	 (nip && S_ISDIR(nip->s.st_mode)) ? "/" : "");
   
   if (S_ISLNK(nip->s.st_mode))
     printf(" -> %s", nip->l);
@@ -772,6 +1178,8 @@ int node_print(const char *key,
       putchar('U');
   }
   putchar(']');
+  if (nip->s.st_flags)
+    printf(" {%s}", fflagstostr(nip->s.st_flags));
   putchar('\n');
   
   if (verbose > 1) {
@@ -830,19 +1238,12 @@ int node_print(const char *key,
 }
 
 
+
 int
-dir_print(BTREE *bp) {
-  return btree_foreach(bp, node_print, &f_verbose);
+dirnode_print(DIRNODE *dnp) {
+  printf("Directory %s:\n", dnp->path ? dnp->path : "<null>");
+  return btree_foreach(dnp->nodes, node_print, &f_verbose);
 }
-
-
-
-typedef struct xdata {
-  const char *srcpath;
-  const char *dstpath;
-  BTREE *src;
-  BTREE *dst;
-} XDATA;
 
 
 int
@@ -851,48 +1252,32 @@ dir_compare(const char *srcpath,
 
 
 int
-dir_recurse(const char *srcpath,
-	    const char *dstpath,
-	    const char *key) {
-  char *nsrc, *ndst;
+dirpair_recurse(DIRPAIR *dp,
+		const char *key) {
+  const char *nsrc, *ndst;
   int rc;
+
+
+  if (dp->src->path)
+    nsrc = strdupcat(dp->src->path, "/", key, NULL);
+  else
+    nsrc = key;
+
+  if (dp->dst->path)
+    ndst = strdupcat(dp->dst->path, "/", key, NULL);
+  else
+    ndst = key;
   
-  nsrc = strdupcat(srcpath, "/", key, NULL);
-  ndst = strdupcat(dstpath, "/", key, NULL);
   rc = dir_compare(nsrc, ndst);
-  free(ndst);
-  free(nsrc);
+
+  if (dp->dst->path)
+    free((void *) ndst);
+  if (dp->src->path)
+    free((void *) nsrc);
+  
   return rc;
 }
 
-
-int
-acl_compare(acl_t a,
-	    acl_t b) {
-  char *as, *bs;
-  int rc = 0;
-
-  
-  if (!a && b)
-    return -1;
-
-  if (a && !b)
-    return -1;
-  
-  /* Hack, do a better comparision */
-  
-  as = acl_to_text(a, NULL);
-  bs = acl_to_text(b, NULL);
-  
-  if (strcmp(as, bs) != 0)
-    rc = 1;
-  
-  acl_free(as);
-  acl_free(bs);
-
-  return rc;
-  
-}
 
 
 int
@@ -921,19 +1306,35 @@ attr_compare_handler(const char *key,
 int
 attr_compare(BTREE *a,
 	     BTREE *b) {
-  int rc = btree_foreach(a, attr_compare_handler, (void *) b);
+  int rc;
 
-  if (rc)
-    printf("ATTRS differs: %d\n", rc);
+
+  if (f_debug)
+    fprintf(stderr, "*** attr_compare a=%p, b=%p\n", a, b);
   
-  return rc;
+  rc = btree_foreach(a, attr_compare_handler, (void *) b);
+  if (rc) {
+    if (f_debug)
+      fprintf(stderr, "ATTRS a->b differs: %d\n", rc);
+    return 1;
+  }
+
+  if (f_remove && b) {
+    rc = btree_foreach(b, attr_compare_handler, (void *) a);
+    if (rc) {
+      if (f_debug)
+	fprintf(stderr, "ATTRS b->a differs: %d\n", rc);
+      return -1;
+    }
+  }
+  
+  return 0;
 }
 
 
-/* XXX Fixme: Add support for fifos & sockets */
 int
-nodeinfo_compare(NODEINFO *a,
-		 NODEINFO *b) {
+node_compare(NODE *a,
+		 NODE *b) {
   int d = 0;
 
 
@@ -949,47 +1350,50 @@ nodeinfo_compare(NODEINFO *a,
     d |= 0x00000001;
 
 
-  if (f_perms) {
+  if (f_owner) {
     /* Check file ownership */
     if (a->s.st_uid != b->s.st_uid) {
       if (a->s.st_uid == getuid() || geteuid() == 0)
 	d |= 0x00000002;
     }
-    
+
     if (a->s.st_gid != b->s.st_gid) {
-      if (geteuid() == 0) /* XXX: TODO: Also allow if a->s.st_gid is in users own groups */
+      if (geteuid() == 0 || in_gidset(a->s.st_gid)) /* Allow if root or one of our groups */
 	d |= 0x00000004;
     }
   }
 
 
   /* Check symbolic link content */
-  if (S_ISLNK(a->s.st_mode) && S_ISLNK(b->s.st_mode)) {
+  if (S_ISLNK(a->s.st_mode)) {
     if ((a->l && !b->l) || (!a->l && b->l) || (a->l && b->l && strcmp(a->l, b->l) != 0))
       d |= 0x00000010;
   }
 
+  /* Check block & character devices */
   if (S_ISBLK(a->s.st_mode) || S_ISCHR(a->s.st_mode)) {
     if (a->s.st_dev != b->s.st_dev)
       d |= 0x00000020;
   }
 
   if (f_times) {
-    if (f_times <= 2 && a->s.st_mtime > b->s.st_mtime)
-      /* Check file modification times - newer */
-      d |= 0x00001000;
-    else if (f_times > 2 && a->s.st_mtime != b->s.st_mtime)
-      /* Check file modification times - exact */      
-      d |= 0x00001000;
-  }
-  
-  /* Check file size (if regular file) */
-  if (f_content) {
-    if (S_ISREG(a->s.st_mode) && S_ISREG(b->s.st_mode)) {
-      if (a->s.st_size != b->s.st_size)
+    if (f_times < 2) {
+      if (a->s.st_mtime > b->s.st_mtime)
+	/* Check file modification times - newer */
 	d |= 0x00000100;
     }
-    
+    else {
+      if (a->s.st_mtime != b->s.st_mtime)
+	/* Check file modification times - exact */      
+	d |= 0x00000100;
+    }
+  }
+  
+  if (f_content && S_ISREG(a->s.st_mode)) {
+    /* Check filesize */
+    if (a->s.st_size != b->s.st_size)
+      d |= 0x00001000;
+
     /* Check digest */
     if (f_digest) {
       if (a->d.len) {
@@ -1019,6 +1423,13 @@ nodeinfo_compare(NODEINFO *a,
       d |= 0x02000000;
   }
 
+  if (f_flags) {
+    if ((a->s.st_flags & ~UF_ARCHIVE) != (b->s.st_flags & ~UF_ARCHIVE))
+      d |= 0x10000000;
+    if (f_flags > 1 && a->s.st_flags & UF_ARCHIVE)
+      d |= 0x20000000;
+  }
+    
   return d;
 }
 
@@ -1027,53 +1438,78 @@ int
 check_new_or_updated(const char *key,
 		     void *val,
 		     void *extra) {
-  NODEINFO *src_nip = (NODEINFO *) val;
-  NODEINFO *dst_nip = NULL;
-  XDATA *xd = (XDATA *) extra;
-  char *dstpath = strdupcat(xd->dstpath, "/", key, NULL);
-
-  if (xd->dst)
-    btree_search(xd->dst, key, (void **) &dst_nip);
+  DIRPAIR *xd = (DIRPAIR *) extra;
+  NODE *src_nip = (NODE *) val;
+  NODE *dst_nip;
+  int rc;
+  const char *srcpath;
+  char *dstpath;
 
   
+  if (xd->dst && xd->dst->path)
+    dstpath = strdupcat(xd->dst->path, "/", key, NULL);
+  else
+    dstpath = strdup(key);
+
+  srcpath = src_nip->p;
+  
+  if (f_debug)
+    fprintf(stderr, "*** check_new_or_updated: src=%s, dst=%s\n",
+	    srcpath,
+	    dstpath);
+
+  dst_nip = NULL;
+  if (xd->dst->nodes)
+    btree_search(xd->dst->nodes, key, (void **) &dst_nip);
+
   if (!dst_nip) {
     /* New file or dir */
 
     if (f_verbose) {
-      printf("+ %s/", xd->dstpath);
-      node_print(key, src_nip, &f_verbose);
+      printf("+ %s", dstpath);
+      node_print(NULL, src_nip, &f_verbose);
     }
 
     if (f_update) {
       if (S_ISREG(src_nip->s.st_mode)) {
 	/* Regular file */
-	if (f_content)
-	  file_copy(src_nip, dstpath);
-	
+	if (f_content) {
+	  rc = file_copy(srcpath, dstpath, src_nip->s.st_mode);
+	  if (rc < 0) {
+	    if (f_debug)
+	      fprintf(stderr, "check_new_or_updated: file_copy(%s, %s, 0x%x) -> %d\n", srcpath, dstpath, src_nip->s.st_mode, rc);
+	    return f_ignore ? 0 : rc;
+	  }
+	}
+	  
       } else if (S_ISDIR(src_nip->s.st_mode)) {
 	/* Directory */
-	if (mkdir(dstpath, src_nip->s.st_mode) < 0) {
+	rc = mkdir(dstpath, src_nip->s.st_mode);
+	if (rc < 0) {
 	  fprintf(stderr, "%s: Error: %s: mkdir: %s\n",
 		  argv0, dstpath, strerror(errno));
-	  exit(1);
+	  return f_ignore ? 0 : rc;
 	}
       } else if (S_ISLNK(src_nip->s.st_mode)) {
-	if (symlink(src_nip->l, dstpath) < 0) {
+	rc = symlink(src_nip->l, dstpath);
+	if (rc < 0) {
 	  fprintf(stderr, "%s: Error: %s: symlink: %s\n",
 		  argv0, dstpath, strerror(errno));
-	  exit(1);
+	  return f_ignore ? 0 : -1;
 	}
       } else if (S_ISBLK(src_nip->s.st_mode) || S_ISCHR(src_nip->s.st_mode)) {
-	if (mknod(dstpath, src_nip->s.st_mode, src_nip->s.st_dev) < 0) {
+	rc = mknod(dstpath, src_nip->s.st_mode, src_nip->s.st_dev);
+	if (rc < 0) {
 	  fprintf(stderr, "%s: Error: %s: mknod: %s\n",
 		  argv0, dstpath, strerror(errno));
-	  exit(1);
+	  return f_ignore ? 0 : rc;
 	}
       } else if (S_ISFIFO(src_nip->s.st_mode)) {
-	if (mkfifo(dstpath, src_nip->s.st_mode) < 0) {
+	rc = mkfifo(dstpath, src_nip->s.st_mode);
+	if (rc < 0) {
 	  fprintf(stderr, "%s: Error: %s: mkfifo: %s\n",
 		  argv0, dstpath, strerror(errno));
-	  exit(1);
+	  return f_ignore ? 0 : rc;
 	}
       } else if (S_ISSOCK(src_nip->s.st_mode)) {
 	struct sockaddr_un su;
@@ -1082,7 +1518,7 @@ check_new_or_updated(const char *key,
 	if (fd < 0) {
 	  fprintf(stderr, "%s: Error: socket(AF_UNIX): %s\n",
 		  argv0, strerror(errno));
-	  exit(1);
+	  return f_ignore ? 0 : -1;
 	}
 
 	memset(&su, 0, sizeof(su));
@@ -1091,20 +1527,39 @@ check_new_or_updated(const char *key,
 	if (bind(fd, (struct sockaddr *) &su, sizeof(su)) < 0) {
 	  fprintf(stderr, "%s: Error: %s: bind(AF_UNIX): %s\n",
 		  argv0, dstpath, strerror(errno));
-	  exit(1);
+	  close(fd);
+	  return f_ignore ? 0 : -1;
 	}
 	close(fd);
       }
-      
     }
     
     if (f_recurse && S_ISDIR(src_nip->s.st_mode)) {
-      dir_recurse(xd->srcpath, xd->dstpath, key);
+      rc = dirpair_recurse(xd, key);
+      if (rc < 0) {
+	if (f_debug)
+	  fprintf(stderr, "check_new_or_updated: dirpair_recurse(%s, %s, %s): rc=%d\n",
+		  xd->src->path,
+		  xd->dst->path,
+		  key,
+		  rc);
+	return f_ignore ? 0 : rc;
+      }
     }
 
     /* Update after subdirectory has been traversed to preserve timestamps */
-    if (f_update)
-      node_update(src_nip, dstpath);
+    if (f_update) {
+      /* Refresh dst node */
+      rc = node_update(src_nip, NULL, dstpath);
+      if (rc < 0) {
+	if (f_debug)
+	  fprintf(stderr, "check_new_or_updated: node_update(%s, NULL, %s) [refresh]: rc=%d\n",
+		  src_nip->p,
+		  dstpath,
+		  rc);
+	return f_ignore ? 0 : rc;
+      }
+    }
   
   } else if ((src_nip->s.st_mode & S_IFMT) != (dst_nip->s.st_mode & S_IFMT)) {
     /* Node changed type */
@@ -1113,76 +1568,121 @@ check_new_or_updated(const char *key,
       /* Changed from non-dir -> dir */
 
       if (f_verbose) {
-	printf("- %s/", xd->dstpath);
-	node_print(key, dst_nip, NULL);
+	printf("- %s", dstpath);
+	node_print(NULL, dst_nip, NULL);
 	
-	printf("+ %s/", xd->dstpath);
-	node_print(key, src_nip, &f_verbose);
+	printf("+ %s", dstpath);
+	node_print(NULL, src_nip, &f_verbose);
       }
 
       if (f_update) {
-	if (unlink(dstpath) < 0) {
+	rc = unlink(dstpath);
+	if (rc < 0) {
 	  fprintf(stderr, "%s: Error: %s: unlink: %s\n",
 		  argv0, dstpath, strerror(errno));
-	  exit(1);
+	  return f_ignore ? 0 : rc;
 	}
 	
-	if (mkdir(dstpath, src_nip->s.st_mode) < 0) {
+	rc = mkdir(dstpath, src_nip->s.st_mode);
+	if (rc < 0) {
 	  fprintf(stderr, "%s: Error: %s: mkdir: %s\n",
 		  argv0, dstpath, strerror(errno));
-	  exit(1);
+	  return f_ignore ? 0 : rc;
 	}
 
-	/* Refresh dst nodeinfo */
-	nodeinfo_get(dst_nip, NULL, NULL);
+	/* Refresh dst node */
+	rc = node_get(dst_nip, NULL);
+	if (rc < 0) {
+	  if (f_debug)
+	    fprintf(stderr, "check_new_or_updated: node_get(%s) [refresh]: rc=%d\n", dst_nip->p, rc);
+	  return f_ignore ? 0 : rc;
+	}
       }
 
-      if (f_recurse)
-	dir_recurse(xd->srcpath, xd->dstpath, key);
+      if (f_recurse) {
+	rc = dirpair_recurse(xd, key);
+	if (rc < 0) {
+	  if (f_debug)
+	    fprintf(stderr, "check_new_or_updated: dirpair_recurse(%s,%s,%s): rc=%d\n",
+		    xd->src->path ? xd->src->path : "<null>",
+		    xd->dst->path ? xd->dst->path : "<null",
+		    key, rc);
+	  return f_ignore ? 0 : rc;
+	}
+      }
       
       /* Update after subdirectory has been traversed to preserve timestamps */
-      if (f_update)
-	node_update(src_nip, dstpath);
+      if (f_update) {
+	rc = node_update(src_nip, dst_nip, dstpath);
+	if (rc < 0) {
+	  if (f_debug)
+	    fprintf(stderr, "check_new_or_updated: node_update(%s, %s, %s): rc=%d\n",
+		    src_nip->p,
+		    dst_nip->p,
+		    dstpath, rc);
+	  return f_ignore ? 0 : rc;
+	}
+      }
       
     } else if (!S_ISDIR(src_nip->s.st_mode) && S_ISDIR(dst_nip->s.st_mode)) {
       /* Changed from dir -> non-dir */
-      if (f_recurse)
-	dir_recurse(xd->srcpath, xd->dstpath, key);
+      if (f_recurse) {
+	rc = dirpair_recurse(xd, key);
+	if (rc < 0) {
+	  if (f_debug)
+	    fprintf(stderr, "check_new_or_updated: dirpair_recurse(%s,%s,%s): rc=%d\n",
+		    xd->src->path ? xd->src->path : "<null>",
+		    xd->dst->path ? xd->dst->path : "<null",
+		    key, rc);
+	  return f_ignore ? 0 : rc;
+	}
+      }
 
       if (f_verbose) {
-	printf("- %s/", xd->dstpath);
-	node_print(key, dst_nip, NULL);
-	printf("+ %s/", xd->dstpath);
-	node_print(key, src_nip, &f_verbose);
+	printf("- %s", dstpath);
+	node_print(NULL, dst_nip, NULL);
+	printf("+ %s", dstpath);
+	node_print(NULL, src_nip, &f_verbose);
       }
 
       if (f_update) {
-	if (rmdir(dstpath) < 0) {
+	rc = rmdir(dstpath);
+	if (rc < 0) {
 	  fprintf(stderr, "%s: Error: %s: rmdir: %s\n",
 		  argv0, dstpath, strerror(errno));
-	  exit(1);
+	  return f_ignore ? 0 : rc;
 	}
 	
 	if (S_ISREG(src_nip->s.st_mode)) {
-	  if (f_content)
-	    file_copy(src_nip, dstpath);
+	  if (f_content) {
+	    rc = file_copy(srcpath, dstpath, src_nip->s.st_mode);
+	    if (rc < 0) {
+	      if (f_debug)
+		fprintf(stderr, "check_new_or_updated: file_copy(%s, %s, 0x%x) -> %d\n",
+			srcpath, dstpath, src_nip->s.st_mode, rc);
+	      return f_ignore ? 0 : rc;
+	    }
+	  }
 	} else if (S_ISLNK(src_nip->s.st_mode)) {
-	  if (symlink(src_nip->l, dstpath) < 0) {
+	  rc = symlink(src_nip->l, dstpath);
+	  if (rc < 0) {
 	    fprintf(stderr, "%s: Error: %s: symlink: %s\n",
 		    argv0, dstpath, strerror(errno));
-	    exit(1);
+	    return f_ignore ? 0 : rc;
 	  }
 	} else if (S_ISBLK(src_nip->s.st_mode) || S_ISCHR(src_nip->s.st_mode)) {
-	  if (mknod(dstpath, src_nip->s.st_mode, src_nip->s.st_dev) < 0) {
+	  rc = mknod(dstpath, src_nip->s.st_mode, src_nip->s.st_dev);
+	  if (rc < 0) {
 	    fprintf(stderr, "%s: Error: %s: mknod: %s\n",
 		    argv0, dstpath, strerror(errno));
-	    exit(1);
+	    return f_ignore ? 0 : rc;
 	  }
 	} else if (S_ISFIFO(src_nip->s.st_mode)) {
-	  if (mkfifo(dstpath, src_nip->s.st_mode) < 0) {
+	  rc = mkfifo(dstpath, src_nip->s.st_mode);
+	  if (rc < 0) {
 	    fprintf(stderr, "%s: Error: %s: mkfifo: %s\n",
 		    argv0, dstpath, strerror(errno));
-	    exit(1);
+	    return f_ignore ? 0 : rc;
 	  }
 	} else if (S_ISSOCK(src_nip->s.st_mode)) {
 	  struct sockaddr_un su;
@@ -1191,7 +1691,7 @@ check_new_or_updated(const char *key,
 	  if (fd < 0) {
 	    fprintf(stderr, "%s: Error: socket(AF_UNIX): %s\n",
 		    argv0, strerror(errno));
-	    exit(1);
+	    return f_ignore ? 0 : -1;
 	  }
 	  
 	  memset(&su, 0, sizeof(su));
@@ -1200,52 +1700,79 @@ check_new_or_updated(const char *key,
 	  if (bind(fd, (struct sockaddr *) &su, sizeof(su)) < 0) {
 	    fprintf(stderr, "%s: Error: %s: bind(AF_UNIX): %s\n",
 		    argv0, dstpath, strerror(errno));
-	    exit(1);
+	    close(fd);
+	    return f_ignore ? 0 : -1;
 	  }
 	  close(fd);
 	}
 	
-	node_update(src_nip, dstpath);
+	rc = node_update(src_nip, dst_nip, dstpath);
+	if (rc < 0) {
+	  if (f_debug)
+	    fprintf(stderr, "check_new_or_updated: node_update(%s, %s, %s): rc=%d\n",
+		    src_nip->p,
+		    dst_nip->p,
+		    dstpath, rc);
+	  return f_ignore ? 0 : rc;
+	}
 
-	/* Refresh dst nodeinfo */
-	nodeinfo_get(dst_nip, NULL, NULL);
+	/* Refresh dst node */
+	rc = node_get(dst_nip, NULL);
+	if (rc < 0) {
+	  if (f_debug)
+	    fprintf(stderr, "check_new_or_updated: node_get(%s) [refresh]: rc=%d\n",
+		    dst_nip->p, rc);
+	  return f_ignore ? 0 : rc;
+	}
       }
       
     } else {
       /* Changed from non-dir to non-dir */
       
       if (f_verbose) {
-	printf("* %s/", xd->dstpath);
-	node_print(key, src_nip, &f_verbose);
+	printf("* %s", dstpath);
+	node_print(NULL, src_nip, &f_verbose);
       }
       
       if (f_update) {
-	if (unlink(dstpath) < 0) {
+	rc = unlink(dstpath);
+	if (rc < 0) {
 	  fprintf(stderr, "%s: Error: %s: unlink: %s\n",
 		  argv0, dstpath, strerror(errno));
-	  exit(1);
+	  return f_ignore ? 0 : rc;
 	}
 	
 	if (S_ISREG(src_nip->s.st_mode)) {
-	  if (f_content)
-	    file_copy(src_nip, dstpath);
+	  if (f_content) {
+	    rc = file_copy(srcpath, dstpath, src_nip->s.st_mode);
+	    if (rc < 0) {
+	      if (f_debug)
+		fprintf(stderr, "check_new_or_updated: file_copy(%s, %s, 0x%x) -> %d\n",
+			srcpath, dstpath, src_nip->s.st_mode, rc);
+	      return f_ignore ? 0 : rc;
+	    }
+	  }
+	  
 	} else if (S_ISLNK(src_nip->s.st_mode)) {
-	  if (symlink(src_nip->l, dstpath) < 0) {
+	  rc = symlink(src_nip->l, dstpath);
+	  if (rc < 0) {
 	    fprintf(stderr, "%s: Error: %s: symlink: %s\n",
 		    argv0, dstpath, strerror(errno));
-	    exit(1);
+	    return f_ignore ? 0 : rc;
 	  }
 	} else if (S_ISBLK(src_nip->s.st_mode) || S_ISCHR(src_nip->s.st_mode)) {
-	  if (mknod(dstpath, src_nip->s.st_mode, src_nip->s.st_dev) < 0) {
+	  rc = mknod(dstpath, src_nip->s.st_mode, src_nip->s.st_dev);
+	  if (rc < 0) {
 	    fprintf(stderr, "%s: Error: %s: symlink: %s\n",
 		    argv0, dstpath, strerror(errno));
-	    exit(1);
+	    return f_ignore ? 0 : rc;
 	  }
 	} else if (S_ISFIFO(src_nip->s.st_mode)) {
-	  if (mkfifo(dstpath, src_nip->s.st_mode) < 0) {
+	  rc = mkfifo(dstpath, src_nip->s.st_mode);
+	  if (rc < 0) {
 	    fprintf(stderr, "%s: Error: %s: mkfifo: %s\n",
 		    argv0, dstpath, strerror(errno));
-	    exit(1);
+	    return f_ignore ? 0 : rc;
 	  }
 	} else if (S_ISSOCK(src_nip->s.st_mode)) {
 	  struct sockaddr_un su;
@@ -1254,7 +1781,7 @@ check_new_or_updated(const char *key,
 	  if (fd < 0) {
 	    fprintf(stderr, "%s: Error: socket(AF_UNIX): %s\n",
 		    argv0, strerror(errno));
-	    exit(1);
+	    return f_ignore ? 0 : -1;
 	  }
 	  
 	  memset(&su, 0, sizeof(su));
@@ -1263,76 +1790,117 @@ check_new_or_updated(const char *key,
 	  if (bind(fd, (struct sockaddr *) &su, sizeof(su)) < 0) {
 	    fprintf(stderr, "%s: Error: %s: bind(AF_UNIX): %s\n",
 		    argv0, dstpath, strerror(errno));
-	    exit(1);
+	    close(fd);
+	    return f_ignore ? 0 : -1;
 	  }
 	  close(fd);
 	}
 	
-	node_update(src_nip, dstpath);
+	rc = node_update(src_nip, dst_nip, dstpath);
+	if (rc < 0) {
+	  if (f_debug)
+	    fprintf(stderr, "check_new_or_updated: node_update(%s, %s, %s): rc=%d\n",
+		    src_nip->p,
+		    dst_nip->p,
+		    dstpath, rc);
+	  return f_ignore ? 0 : rc;
+	}
 	
-	/* Refresh dst nodeinfo */
-	nodeinfo_get(dst_nip, NULL, NULL);
+	/* Refresh dst node */
+	rc = node_get(dst_nip, NULL);
+	if (rc < 0) {
+	  if (f_debug)
+	    fprintf(stderr, "check_new_or_updated: node_get(%s) [refresh] rc=%d\n",
+		    dst_nip->p, rc);
+	  return f_ignore ? 0 : rc;
+	}
       }
     }
   } else {
     /* Object is same type */
     int d;
     
-    if (f_recurse && S_ISDIR(dst_nip->s.st_mode))
-      dir_recurse(xd->srcpath, xd->dstpath, key);
-
-    d = 0;
-    if (f_force || (d = nodeinfo_compare(src_nip, dst_nip)) != 0) {
-      if (f_verbose) {
-	printf("! %s/", xd->dstpath);
-	node_print(key, src_nip, &f_verbose);
-
+    if (f_recurse && S_ISDIR(dst_nip->s.st_mode)) {
+      rc = dirpair_recurse(xd, key);
+      if (rc < 0) {
 	if (f_debug)
-	  fprintf(stderr, "nodeinfo_compare(%s, %s) -> %08x\n", src_nip->p, dst_nip ? dst_nip->p : "<null>", d);
+	  fprintf(stderr, "check_new_or_updated: dirpair_recurse(%s, %s, %s): rc=%d\n",
+		  xd->src->path,
+		  xd->dst->path,
+		  key, rc);
+	return f_ignore ? 0 : rc;
+      }
+    }
+    
+    d = 0;
+    if (f_force || (d = node_compare(src_nip, dst_nip)) != 0) {
+      /* Something is different */
+      
+      if (f_verbose) {
+	printf("! %s", dstpath);
+	node_print(NULL, src_nip, &f_verbose);
       }
       
-      /* Something is different */
       if (f_update) {
-	
 	if (S_ISREG(src_nip->s.st_mode) &&
 	    f_content &&
-	    (f_force || d < 0 || (d & 0x000fff00))) { /* Force, Not Found, Digest, Mtime, Size */
+	    (f_force || d < 0 || (d & 0x200fff00))) { /* Force, Not Found,  Archive, Digest, Mtime, Size */
 	  /* Regular file */
 	  int rc;
 
-	  rc = file_copy(src_nip, dstpath);
-	  if (f_debug)
-	    fprintf(stderr, "file_copy(%s, %s) -> %d\n", src_nip->p, dstpath, rc);
-	  
+	  rc = file_copy(srcpath, dstpath, src_nip->s.st_mode);
+	  if (rc < 0) {
+	    if (f_debug)
+	      fprintf(stderr, "file_copy(%s, %s, 0x%x) -> %d\n", srcpath, dstpath, src_nip->s.st_mode, rc);
+	    return f_ignore ? 0 : rc;
+	  }
 	} else if (S_ISLNK(src_nip->s.st_mode) &&
 		   (f_force || d < 0 || (d & 0x000000f0))) { /* Force, Not Found, Content */
-	  if (unlink(dstpath) < 0) {
+	  rc = unlink(dstpath);
+	  if (rc < 0) {
 	    fprintf(stderr, "%s: Error: %s: unlink: %s\n",
 		    argv0, dstpath, strerror(errno));
-	    exit(1);
+	    return f_ignore ? 0 : rc;
 	  }
-	  if (symlink(src_nip->l, dstpath) < 0) {
+	  rc = symlink(src_nip->l, dstpath);
+	  if (rc < 0) {
 	    fprintf(stderr, "%s: Error: %s: symlink: %s\n",
 		    argv0, dstpath, strerror(errno));
-	    exit(1);
+	    return f_ignore ? 0 : rc;
 	  }
 	} else if (S_ISBLK(src_nip->s.st_mode) || S_ISCHR(src_nip->s.st_mode)) {
-	  if (unlink(dstpath) < 0) {
+	  rc = unlink(dstpath);
+	  if (rc < 0) {
 	    fprintf(stderr, "%s: Error: %s: unlink: %s\n",
 		    argv0, dstpath, strerror(errno));
-	    exit(1);
+	    return f_ignore ? 0 : rc;
 	  }
-	  if (mknod(dstpath, src_nip->s.st_mode, src_nip->s.st_dev) < 0) {
+	  rc = mknod(dstpath, src_nip->s.st_mode, src_nip->s.st_dev);
+	  if (rc < 0) {
 	    fprintf(stderr, "%s: Error: %s: symlink: %s\n",
 		    argv0, dstpath, strerror(errno));
-	    exit(1);
+	    return f_ignore ? 0 : rc;
 	  }
 	} /* else do nothing special for fifos or sockets */
 	
-	node_update(src_nip, dstpath);
+	rc = node_update(src_nip, dst_nip, dstpath);
+	if (rc < 0) {
+	  if (f_debug)
+	    fprintf(stderr, "check_new_or_updated: node_update(%s, %s, %s): rc=%d\n",
+		    src_nip->p,
+		    dst_nip->p,
+		    dstpath, rc);
+	  return f_ignore ? 0 : rc;
+	}
 	
-	/* Refresh dst nodeinfo */
-	nodeinfo_get(dst_nip, NULL, NULL);
+	/* Refresh dst node */
+	rc = node_get(dst_nip, NULL);
+	if (rc < 0) {
+	  if (f_debug)
+	    fprintf(stderr, "check_new_or_updated: node_get(%s) [refresh] rc=%d\n",
+		    dst_nip->p, rc);
+	  return f_ignore ? 0 : rc;
+	}
       }
     }
   }
@@ -1346,84 +1914,349 @@ int
 check_removed(const char *key,
 	      void *val,
 	      void *extra) {
-  NODEINFO *dst_nip = (NODEINFO *) val;
-  NODEINFO *src_nip = NULL;
-  XDATA *xd = (XDATA *) extra;
+  NODE *dst_nip = (NODE *) val;
+  DIRPAIR *xd = (DIRPAIR *) extra;
+  char *dstpath = dst_nip->p;
+  NODE *src_nip;
+  int rc = -1;
   
-  btree_search(xd->src, key, (void **) &src_nip);
+
+  src_nip = NULL;
+  btree_search(xd->src->nodes, key, (void **) &src_nip);
+  if (src_nip)
+    return 0;
   
-  if (!src_nip) {
-    /* Object not found in source */
-    
-    if (f_recurse && S_ISDIR(dst_nip->s.st_mode))
-      dir_recurse(xd->srcpath, xd->dstpath, key);
+  /* Object not found in source */
 
-    if (f_verbose) {
-      printf("- %s/", xd->dstpath);
-      node_print(key, dst_nip, NULL);
-    }
-
-    if (f_update) {
-      char *dstpath = strdupcat(xd->dstpath, "/", key, NULL);
-
-      if (S_ISDIR(dst_nip->s.st_mode))
-	rmdir(dstpath);
-      else
-	unlink(dstpath);
-      
-      free(dstpath);
+  /* First we recurse down */
+  if (f_recurse && S_ISDIR(dst_nip->s.st_mode)) {
+    rc = dirpair_recurse(xd, key);
+    if (rc < 0) {
+      if (f_debug)
+	fprintf(stderr, "check_removed: dirpair_recurse(%s, %s, %s): rc=%d\n",
+		xd->src->path,
+		xd->dst->path,
+		key, rc);
+      return f_ignore ? 0 : rc;
     }
   }
+  
+  if (f_verbose) {
+    printf("- %s", dstpath);
+    node_print(NULL, dst_nip, NULL);
+  }
+  
+  if (f_update) {
+    if (S_ISDIR(dst_nip->s.st_mode)) {
+      rc = rmdir(dstpath);
+      if (rc < 0) {
+	fprintf(stderr, "%s: Error: %s: rmdir: %s\n",
+		argv0, dstpath, strerror(errno));
+	return f_ignore ? 0 : rc;
+      }
+    }
+    else {
+      rc = unlink(dstpath);
+      if (rc < 0) {
+	fprintf(stderr, "%s: Error: %s: unlink: %s\n",
+		argv0, dstpath, strerror(errno));
+	return f_ignore ? 0 : rc;
+      }
+    }
+  }
+  
   return 0;
 }
+
+
+int
+dirnode_compare(DIRNODE *src,
+		DIRNODE *dst) {
+  DIRPAIR dat;
+  int rc;
+  
+
+  dat.src = src;
+  dat.dst = dst;
+
+  if (f_debug)
+    fprintf(stderr, "*** dirnode_compare: src=%s vs dst=%s\n",
+	    src->path ? src->path : "<null>",
+	    dst->path ? dst->path : "<null>");
+  
+  rc = btree_foreach(dat.src->nodes, check_new_or_updated, &dat);
+  if (f_remove)
+    btree_foreach(dat.dst->nodes, check_removed, &dat);
+
+  return rc;
+}
+
 
 int
 dir_compare(const char *srcpath,
 	    const char *dstpath) {
-  XDATA dat;
+  DIRNODE *src;
+  DIRNODE *dst;
+  int rc;
   
 
-  dat.srcpath = srcpath;
-  dat.dstpath = dstpath;
+  src = dirnode_alloc(srcpath);
+  dirnode_add(src, srcpath, 1);
+
+  dst = dirnode_alloc(dstpath);
+  dirnode_add(dst, dstpath, 1);
+
+  rc = dirnode_compare(src, dst);
   
-  dat.src = dir_load(srcpath);
-  dat.dst = dir_load(dstpath);
+  dirnode_free(dst);
+  dirnode_free(src);
+  
+  return rc;
+}
 
-  btree_foreach(dat.src, check_new_or_updated, &dat);
 
-  if (f_remove)
-    btree_foreach(dat.dst, check_removed, &dat);
+int
+str2size(const char **str,
+	 size_t *vp) {
+  size_t base = 1000, vbm, sbm, v, sv;
+  int rc = 0, rv = 0, sign = 1;
+  char c, i;
 
-  btree_destroy(dat.src);
-  btree_destroy(dat.dst);
+  
+  *vp = 0;
+
+  if (**str == '-' && isdigit((*str)[1])) {
+    ++*str;
+    sign = -1;
+  }
+  
+  while (**str && isdigit(**str)) {
+    c = i = 0;
+
+    if ((*str)[0] == '0' && (*str)[1] == 'x') {
+      ++*str;
+      ++*str;
+      
+      rc = sscanf(*str, "%lx%c%c", &v, &c, &i);
+      if (rc < 1)
+	return -1;
+      
+      while (**str && isxdigit(**str))
+	++*str;
+      
+      rv = 1;
+    } else {
+      rc = sscanf(*str, "%ld%c%c", &v, &c, &i);
+      if (rc < 1)
+	return -1;
+      
+      while (**str && isdigit(**str))
+	++*str;
+      
+      rv = 1;
+    }
+
+    if (c) {
+      if (i == 'i') {
+	++*str;
+	base = 1024;
+      }
+    }
+
+    switch (toupper(c)) {
+    case 'K':
+      vbm = base;
+      sbm = 1;
+      break;
+      
+    case 'M':
+      vbm = base*base;
+      sbm = base;
+      break;
+      
+    case 'G':
+      vbm = base*base*base;
+      sbm = base*base;
+      break;
+      
+    case 'T':
+      vbm = base*base*base*base;
+      sbm = base*base*base;
+      break;
+      
+    case 'P':
+      vbm = base*base*base*base;
+      sbm = base*base*base;
+      break;
+      
+    default:
+      c = 0;
+      vbm = 1;
+      sbm = 1;
+      break;
+    }
+
+    v *= vbm;
+    
+    if (c) {
+      int nd = 0;
+      ++*str;
+      sv = 0;
+      while (isdigit(**str)) {
+	sv *= 10;
+	sv += **str - '0';
+	++nd;
+	++*str;
+      }
+      switch (nd) {
+      case 1:
+	sv *= 100;
+	break;
+      case 2:
+	sv *= 10;
+	break;
+      }
+		     
+      v += sv*sbm;
+    }
+    
+    *vp += v;
+    
+    if (**str == '+')
+      ++*str;
+    else
+      break;
+  }
+
+  *vp *= sign;
+  return rv;
+}
+
+#define OPT_NONE 0
+#define OPT_INT  1
+#define OPT_STR  2
+#define OPT_SIZE 3
+
+typedef struct option {
+  char c;
+  char *s;
+  char *a;
+  char *h;
+  int f;
+  void *v;
+} OPTION;
+
+OPTION opts[] = {
+  { 'h', "help",        NULL,        "Display this information", 0, NULL },
+  { 'v', "verbose",     NULL,        "Increase verbosity", 0, NULL },
+  { 'd', "debug",       NULL,        "Increase debug level", 0, NULL },
+  { 'n', "dry-run",     NULL,        "Do a dry-run (No updates)", 0, NULL },
+  { 'f', "force",       NULL,        "Force updates", 0, NULL },
+  { 'i', "ignore",      NULL,        "Ignore errors and continue", 0, NULL },
+  { 'r', "recurse",     NULL,        "Recurse into subdirectories", 0, NULL },
+  { 'p', "preserve",    NULL,        "Check and preserve mode bits", 0, NULL },
+  { 'o', "owner",       NULL,        "Check and preserve owner & group", 0, NULL },
+  { 't', "times",       NULL,        "Check mtime (and preserve mtime and atime if '-tt')", 0, NULL },
+  { 'x', "expunge",     NULL,        "Remove/replace deleted/changed objects", 0, NULL },
+  { 'u', "no-copy",     NULL,        "Do not copy file contents", 0, NULL },
+  { 'z', "zero-fill",   NULL,        "Try to generate zero-holed files", 0, NULL },
+  { 'A', "acls",        NULL,        "Copy ACLs", 0, NULL },
+  { 'X', "attributes",  NULL,        "Copy extended attributes", 0, NULL },
+  { 'F', "file-flags",  NULL,        "Copy file flags (and check/update 'uarch' if '-FF')", 0, NULL },
+  { 'a', "archive",     NULL,        "Archive mode (equal to '-rpottAXFF')", 0, NULL },
+  { 'M', "mirror",      NULL,        "Mirror mode (equal to '-ax')", 0, NULL },
+  { 'B', "buffer-size", "<size>",    "Set copy buffer size", OPT_SIZE, &f_bufsize },
+  { 'D', "digest",      "<digest>",  "Set file content digest algorithm", 0, NULL },
+  { 0, NULL, NULL },
+};
+
+  
+int
+get_option(const char *s,
+	   int *jp) {
+  int i, len;
+  char *d;
+
+  
+  if (s[0] != '-' || s[1] != '-')
+    return 0;
+
+  len = strlen(s);
+  d = strchr(s, '=');
+
+  if (d) {
+    *d = '\0';
+    *jp = d-s;
+  } else
+    *jp = len-1;
+
+  s += 2;
+  for (i = 0; opts[i].s; i++) {
+    if (strcmp(opts[i].s, s) == 0)
+      return opts[i].c;
+  }
+
   return 0;
 }
- 
+
+
 int
 main(int argc,
      char *argv[]) {
-  int i, j, k;
+  int i, j, k, rc;
   char *ds;
-  
+  const char *bs;
+  DIRNODE *src;
+  DIRNODE *dst;
 
+  if (geteuid() != 0) {
+    int rc;
+    
+    rc = getgroups(NGROUPS_MAX+1, &gidsetv[0]);
+    if (rc < 0) {
+      fprintf(stderr, "%s: Error: getgroups: %s\n", argv0, strerror(errno));
+      exit(1);
+    }
+    
+    gidsetlen = rc;
+  }
+  
   for (i = 1; i < argc && argv[i][0] == '-'; i++) {
+    int c;
+    
     if (!argv[i][1]) {
       ++i;
       break;
     }
+
+    if (argv[i][1] == '-' && (c = get_option(argv[i], &j)) != 0)
+      goto GotArg;
     
-    for (j = 1; argv[i][j]; j++)
-      switch (argv[i][j]) {
+    for (j = 1; argv[i][j]; j++) {
+      c = argv[i][j];
+
+    GotArg:
+      switch (c) {
       case 'v':
-	++f_verbose;
+	if (sscanf(argv[i]+j+1, "%d", &f_verbose) == 1)
+	  goto NextArg;
+	else
+	  ++f_verbose;
 	break;
 
       case 'd':
-	++f_debug;
+	if (sscanf(argv[i]+j+1, "%d", &f_debug) == 1)
+	  goto NextArg;
+	else
+	  ++f_debug;
 	break;
 
       case 'n':
 	f_update = 0;
+	break;
+
+      case 'i':
+	++f_ignore;
 	break;
 
       case 'f':
@@ -1446,6 +2279,10 @@ main(int argc,
 	++f_perms;
 	break;
 
+      case 'o':
+	++f_owner;
+	break;
+
       case 't':
 	++f_times;
 	break;
@@ -1462,14 +2299,21 @@ main(int argc,
 	++f_attrs;
 	break;
 
-      case 'm':
+      case 'F':
+	++f_flags;
+	break;
+
+      case 'M':
 	f_remove = 1;
+	/* no break */
       case 'a':
 	f_recurse = 1;
 	f_acls    = 1;
 	f_attrs   = 1;
-	f_perms   = 2;
-	f_times   = 3; /* Exact mtime comparision */
+	f_perms   = 1; /* Copy permission bits */
+	f_owner   = 1; /* Copy owner/group */
+	f_times   = 2; /* Exact mtime comparision */
+	f_flags   = 2; /* Handle UF_ARCHIVE magic */
 	break;
 
       case 'D':
@@ -1486,6 +2330,19 @@ main(int argc,
 	}
 	goto NextArg;
 	
+      case 'B':
+	bs = NULL;
+	if (argv[i][j+1])
+	  bs = argv[i]+j+1;
+	else if (argv[i+1])
+	  bs = argv[++i];
+	if (str2size(&bs, &f_bufsize) < 0) {
+	  fprintf(stderr, "%s: Error: %s: Invalid buffer size\n",
+		  argv0, bs);
+	  exit(1);
+	}
+	goto NextArg;
+	
       case '-':
 	++i;
 	goto EndArg;
@@ -1494,33 +2351,38 @@ main(int argc,
 	printf("Usage:\n");
 	printf("  %s [<options>] <src> <dst>\n", argv0);
 	printf("\nOptions:\n");
-	printf("  -h             Display this information\n");
-	printf("  -v             Increase verbosity\n");
-	printf("  -d             Increase debugging level\n");
-	printf("  -n             No-update mode\n");
-	printf("  -f             Force-copy mode\n");
-	printf("  -r             Recurse into subdirectories\n");
-	printf("  -p             Check and preserve mode bits\n");
-	printf("  -pp            Check and preserve mode bits and owner/group\n");
-	printf("  -t             Check if source mtime is newer\n");
-	printf("  -tt            Check if source mtime is newer and reset on target\n");
-	printf("  -ttt           Check if source mtime differs and reset on target\n");
-	printf("  -x             Remove/replace deleted/changed objects\n");
-	printf("  -u             Do not update file contents\n");
-	printf("  -z             Generate zero-holed files\n");
-	printf("  -A             Enable ACLs\n");
-	printf("  -X             Enable Extended Attributes\n");
-	printf("  -a             Archive mode (equal to -rpptttAX)\n");
-	printf("  -m             Mirror mode (equal to -ax)\n");
-	printf("  -D <digest>    Select file digest algorithm\n");
+	for (k = 0; opts[k].s; k++) {
+	  printf("  -%c | --%s%*s%-15s%s",
+		 opts[k].c,
+		 opts[k].s,
+		 (int) (15-strlen(opts[k].s)), "",
+		 opts[k].a ? opts[k].a : "",
+		 opts[k].h);
+	  if (opts[k].v) {
+	    putchar(' ');
+	    switch (opts[k].f) {
+	    case OPT_INT:
+	      printf("[%d]", * (int *) opts[k].v);
+	      break;
+	    case OPT_SIZE:
+	      printf("[%ld]", * (size_t *) opts[k].v);
+	      break;
+	    case OPT_STR:
+	      printf("[%s]", * (char **) opts[k].v);
+	      break;
+	    }
+	  }
+	  putchar('\n');
+	}
 	printf("\nDigests:\n  ");
 	for (k = DIGEST_TYPE_NONE; k <= DIGEST_TYPE_SHA512; k++)
 	  printf("%s%s", (k != DIGEST_TYPE_NONE ? ", " : ""), digest_type2str(k));
 	putchar('\n');
 	puts("\nUsage:");
-	puts("  Options may be specified multiple times (-vv). A single '-' ends option");
-	puts("  parsing. If no Digest is selected then only ctime, mtime & file size will");
-	puts("  be used to detect file content changes.");
+	puts("  Options may be specified multiple times (-vv), or values may be specified");
+	puts("  (-v2 or --verbose=2). A single '-' ends option parsing. If no Digest is ");
+	puts("  selected then only ctime, mtime & file size will be used to detect file");
+	puts("  content changes.");
 	printf("\nVersion:\n  %s\n", version);
 	printf("\nAuthor:\n");
 	puts("  Peter Eriksson <pen@lysator.liu.se>");
@@ -1531,19 +2393,34 @@ main(int argc,
 		argv0, argv[i][j]);
 	exit(1);
       }
+    }
   NextArg:;
   }
   
  EndArg:
   argv0 = argv[0];
 
-  if (i+2 != argc) {
-    fprintf(stderr, "%s: Error: Missing required arguments: <src> <dst>\n",
+  if (i+2 > argc) {
+    fprintf(stderr, "%s: Error: Missing required arguments: <src-1> [.. <src-N>] <dst>\n",
 	    argv0);
     exit(1);
   }
+
+  src = dirnode_alloc(NULL);
+  for (j = i; j < argc-1; j++) {
+    rc = dirnode_add(src, argv[j], 0);
+    if (rc < 0)
+      exit(1);
+  }
   
-  return dir_compare(argv[i], argv[i+1]);
+  dst = dirnode_alloc(argv[argc-1]);
+  
+  /* XXX - Handle dst being non-dir */
+  rc = dirnode_add(dst, argv[argc-1], 1);
+  if (rc < 0)
+    exit(1);
+  
+  return dirnode_compare(src, dst);
 }
 
 

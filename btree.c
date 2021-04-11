@@ -398,6 +398,11 @@ int
 btree_foreach(BTREE *bt,
 	      int (*fun)(const char *key, void *val, void *extra),
 	      void *extra) {
+  if (!bt) {
+    errno = EINVAL;
+    return -1;
+  }
+  
   if (bt->head)
     return bnode_walker(bt->head, fun, extra);
   
