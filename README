@@ -28,7 +28,7 @@ USAGE
 	printf("  -X             Enable Extended Attributes\n");
 	printf("  -F             Enable File Flags\n");
 	printf("  -FF            Enable File Flags + UF_ARCHIVE handling\n");
-	printf("  -a             Archive mode (equal to -rpptttAXFF)\n");
+	printf("  -a             Archive mode (equal to -rpottAXFF)\n");
 	printf("  -M             Mirror mode (equal to -ax)\n");
 	printf("  -B <size>      Set buffer size [%lu]\n", f_bufsize);
 	printf("  -D <digest>    Select file digest algorithm\n");

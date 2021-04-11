@@ -1,4 +1,3 @@
-* Diff/Deltas och Extended Attributes
 * Clean up the code a bit
 * Smarter/more efficient comparision of ACLs
 * Add support for Linux, MacOS & OmniOS
