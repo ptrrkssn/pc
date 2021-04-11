@@ -35,14 +35,26 @@
 
 #include <sys/types.h>
 
-#include <md5.h>
-#include <skein.h>
-#include <sha256.h>
-#include <sha384.h>
-#include <sha512.h>
-
+#include <zlib.h>
 #define HAVE_ADLER32 1
 #define HAVE_CRC32   1
+
+#ifdef __FreeBSD__
+#include <md5.h>
+#define HAVE_MD5 1
+
+#include <skein.h>
+#define HAVE_SKEIN256 1
+
+#include <sha256.h>
+#define HAVE_SHA256 1
+
+#include <sha384.h>
+#define HAVE_SHA384 1
+
+#include <sha512.h>
+#define HAVE_SHA512 1
+#endif
 
 
 typedef enum {
@@ -54,11 +66,21 @@ typedef enum {
 #if HAVE_CRC32
 	      DIGEST_TYPE_CRC32    = 2,
 #endif
+#if HAVE_MD5
 	      DIGEST_TYPE_MD5      = 3,
+#endif
+#if HAVE_SKEIN256
 	      DIGEST_TYPE_SKEIN256 = 4,
+#endif
+#if HAVE_SHA256
 	      DIGEST_TYPE_SHA256   = 5,
+#endif
+#if HAVE_SHA384
 	      DIGEST_TYPE_SHA384   = 6,
+#endif
+#if HAVE_SHA512
 	      DIGEST_TYPE_SHA512   = 7,
+#endif
 } DIGEST_TYPE;
 
 
@@ -80,11 +102,21 @@ typedef struct digest {
 #if HAVE_ADLER32 
     uint32_t     adler32;
 #endif
+#if HAVE_MD5
     MD5_CTX      md5;
+#endif
+#if HAVE_SKEIN256
     SKEIN256_CTX skein256;
+#endif
+#if HAVE_SHA256
     SHA256_CTX   sha256;
+#endif
+#if HAVE_SHA384
     SHA384_CTX   sha384;
+#endif
+#if HAVE_SHA512
     SHA512_CTX   sha512;
+#endif
   } ctx;
 } DIGEST;
 
@@ -98,12 +130,21 @@ typedef struct digest {
 #if HAVE_CRC32
 #define DIGEST_BUFSIZE_CRC32    sizeof(uint32_t)
 #endif
+#if HAVE_MD5
 #define DIGEST_BUFSIZE_MD5      16
+#endif
+#if HAVE_SKEIN256
 #define DIGEST_BUFSIZE_SKEIN256 32
+#endif
+#if HAVE_SHA256
 #define DIGEST_BUFSIZE_SHA256   32
+#endif
+#if HAVE_SHA384
 #define DIGEST_BUFSIZE_SHA384   48  
+#endif
+#if HAVE_SHA512
 #define DIGEST_BUFSIZE_SHA512   64
-
+#endif
 #define DIGEST_BUFSIZE_MAX      64
 
 
