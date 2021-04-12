@@ -45,10 +45,13 @@ distclean: clean
 push:	distclean
 	git add -A && git commit -a && git push
 
-tests:	test-setup test-1 # test-2 test-3 test-4 test-5
+tests:	test-setup test-0 test-1 # test-2 test-3 test-4 test-5
 
 test-setup:
 	rm -fr t && mkdir t && cd t && mkdir -p a/a-d1 a/a-d2 a/a-d1/a-d1-d4 b b/b-d1; touch a/a-f1 a/a-f2 a/a-d2/a-d2-f1 a/a-d1/a-d1-d4/a-d1-d4-f1 b/b-f1
+
+test-0: pc
+	./pc -h
 
 test-1: pc
 	@(echo "Test 1 ------------------------" ; cd t && ../pc -vd a/ b && ls -lR b)
