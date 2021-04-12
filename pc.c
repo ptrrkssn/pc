@@ -43,6 +43,7 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <time.h>
 #if USE_AIO
 #include <aio.h>
 #endif
@@ -346,35 +347,35 @@ size2str(size_t b,
   }
   
   t = b/base;
-  if (llabs(b) < 10000 && (t*base != b)) {
+  if (b < 10000 && (t*base != b)) {
     snprintf(buf, bufsize, "%ld", b);
     return buf;
   }
   
   b /= base;
   t = b/base;
-  if (llabs(b) < 10000 && (t*base != b)) {
+  if (b < 10000 && (t*base != b)) {
     snprintf(buf, bufsize, "%ld K%s", b, b2f == 1 ? "i" : "");
     return buf;
   }
   
   b /= base;
   t = b/base;
-  if (llabs(b) < 10000 && (t*base != b)) {
+  if (b < 10000 && (t*base != b)) {
     snprintf(buf, bufsize, "%ld M%s", b, b2f == 1 ? "i" : "");
     return buf;
   }
   
   b /= base;
   t = b/base;
-  if (llabs(b) < 10000 && (t*base != b)) {
+  if (b < 10000 && (t*base != b)) {
     snprintf(buf, bufsize, "%ld G%s", b, b2f == 1 ? "i" : "");
     return buf;
   }
   
   b /= base;
   t = b/base;
-  if (llabs(b) < 10000 && (t*base != b)) {
+  if (b < 10000 && (t*base != b)) {
     snprintf(buf, bufsize, "%ld T%s", b, b2f == 1 ? "i" : "");
     return buf;
   }
