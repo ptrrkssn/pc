@@ -58,9 +58,9 @@
 #define extattr_delete_link(path, ns, name)          removexattr(path, name, XATTR_NOFOLLOW)
 
 /* Beware that buf is not formatted in the same way on FreeBSD vs the rest */
-#define extattr_list_fd(fd, ns, buf, size)	     flistxattr(fd, buf, size, 0)
-#define extattr_list_file(fd, ns, buf, size) 	     listxattr(fd, buf, size, 0)
-#define extattr_list_link(fd, ns, buf, size)	     listxattr(fd, buf, size, XATTR_NOFOLLOW)
+#define extattr_list_fd(fd, ns, buf, size)	     flistxattr(fd, (char *) buf, size, 0)
+#define extattr_list_file(fd, ns, buf, size) 	     listxattr(fd, (char *) buf, size, 0)
+#define extattr_list_link(fd, ns, buf, size)	     listxattr(fd, (char *) buf, size, XATTR_NOFOLLOW)
 
 #endif
 #endif

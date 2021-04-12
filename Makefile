@@ -15,6 +15,9 @@ pc.o: pc.c digest.h btree.h
 clean:
 	-rm -fr *.o pc \#* *~ core t
 
+push:	clean
+	git add -A && git commit -a && git push
+
 tests:	test-setup test-1 # test-2 test-3 test-4 test-5
 
 test-setup:

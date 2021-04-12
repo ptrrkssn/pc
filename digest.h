@@ -83,6 +83,13 @@ typedef enum {
 #endif
 } DIGEST_TYPE;
 
+#if defined(DIGEST_TYPE_SHA512)
+#define DIGEST_TYPE_BEST DIGEST_TYPE_SHA512
+#elif defined(DIGEST_TYPE_CRC32)
+#define DIGEST_TYPE_BEST DIGEST_TYPE_CRC32
+#else
+#define DIGEST_TYPE_BEST DIGEST_TYPE_NONE
+#endif
 
 typedef enum {
 	      DIGEST_STATE_NONE    = 0,

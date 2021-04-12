@@ -69,9 +69,15 @@ typedef struct node {
   struct stat s;	/* Stat info */
   char *l;		/* Symbolic link content */
   struct {
+#ifdef ACL_TYPE_NFS4
     acl_t nfs;		/* NFSv4 / ZFS */
+#endif
+#ifdef ACL_TYPE_ACCESS
     acl_t acc;		/* POSIX */
+#endif
+#ifdef ACL_TYPE_DEFAULT
     acl_t def;		/* POSIX */
+#endif
   } a;
   struct {
 #ifdef EXTATTR_NAMESPACE_SYSTEM
@@ -417,8 +423,8 @@ file_copy(const char *srcpath,
       holed = 1;
       rc = lseek(dst_fd, sbytes, SEEK_CUR);
       if (rc < 0) {
-	fprintf(stderr, "%s: Error: %s: lseek(%ld): %s\n",
-		argv0, dstpath, sbytes, strerror(errno));
+	fprintf(stderr, "%s: Error: %s: lseek(%lld): %s\n",
+		argv0, dstpath, (long long) sbytes, strerror(errno));
 	rc = -1;
 	goto End;
       }
@@ -426,15 +432,15 @@ file_copy(const char *srcpath,
     else {
       rc = write(dst_fd, buf, sbytes);
       if (rc < 0) {
-	fprintf(stderr, "%s: Error: %s: write(%ld): %s\n",
-		argv0, dstpath, sbytes, strerror(errno));
+	fprintf(stderr, "%s: Error: %s: write(%lld): %s\n",
+		argv0, dstpath, (long long) sbytes, strerror(errno));
 	rc = -1;
 	goto End;
       }
     }
     tbytes += sbytes;
     if (f_verbose > 1)
-      printf("  %ld bytes copied\r", tbytes);
+      printf("  %lld bytes copied\r", (long long) tbytes);
   }
   if (rc < 0) {
     fprintf(stderr, "%s: Error: %s: read(): %s\n",
@@ -603,6 +609,7 @@ node_update(NODE *src_nip,
   }
   
   if (f_acls) {
+#ifdef ACL_TYPE_NFS4
     if (src_nip->a.nfs) {
       if (!dst_nip->a.nfs || acl_compare(src_nip->a.nfs, dst_nip->a.nfs) != 0) {
 	if (acl_set_link_np(dstpath, ACL_TYPE_NFS4, src_nip->a.nfs) < 0) {
@@ -614,6 +621,8 @@ node_update(NODE *src_nip,
 	}
       }
     }
+#endif
+#ifdef ACL_TYPE_ACCESS
     if (src_nip->a.acc) {
       if (!dst_nip->a.acc || acl_compare(src_nip->a.acc, dst_nip->a.acc) != 0) {
 	if (acl_set_link_np(dstpath, ACL_TYPE_ACCESS, src_nip->a.acc) < 0) {
@@ -625,6 +634,8 @@ node_update(NODE *src_nip,
 	}
       }
     }
+#endif
+#ifdef ACL_TYPE_DEFAULT
     if (src_nip->a.def) {
       if (!dst_nip->a.def || acl_compare(src_nip->a.def, dst_nip->a.def) != 0) {
 	if (acl_set_link_np(dstpath, ACL_TYPE_DEFAULT, src_nip->a.def) < 0) {
@@ -636,6 +647,7 @@ node_update(NODE *src_nip,
 	}
       }
     }
+#endif
   }
   
   if (f_times > 1) {
@@ -656,6 +668,7 @@ node_update(NODE *src_nip,
     }
   }
   
+#ifdef UF_ARCHIVE
   if (f_flags) {
     if (!dst_nip || (src_nip->s.st_flags & ~UF_ARCHIVE) != (dst_nip->s.st_flags & ~UF_ARCHIVE)) {
       if (lchflags(dstpath, src_nip->s.st_flags) < 0) {
@@ -677,7 +690,8 @@ node_update(NODE *src_nip,
       }
     }
   }
-  
+#endif
+
   return rc;
 }
 
@@ -733,7 +747,7 @@ attrs_get(const char *objpath,
 #ifdef __FreeBSD__
     len = *ap++; /* 1 byte = length */
 #else
-    len = strlen(ap); /* NUL-terminated strings */
+    len = strlen((char *) ap); /* NUL-terminated strings */
 #endif
     an = malloc(len+1);
     if (!an) {
@@ -745,7 +759,7 @@ attrs_get(const char *objpath,
     an[len] = '\0';
     ap += len;
 #ifndef __FreeBSD__
-    ++ap
+    ++ap;
 #endif
 
     if (is_link)
@@ -913,13 +927,25 @@ node_get(NODE *nip,
   
   if (f_acls) {
     if (S_ISLNK(nip->s.st_mode)) {
+#ifdef ACL_TYPE_NFS4
       nip->a.nfs = acl_get_link_np(nip->p, ACL_TYPE_NFS4);
+#endif
+#ifdef ACL_TYPE_ACCESS
       nip->a.acc = acl_get_link_np(nip->p, ACL_TYPE_ACCESS);
+#endif
+#ifdef ACL_TYPE_ACCESS
       nip->a.def = acl_get_link_np(nip->p, ACL_TYPE_DEFAULT);
+#endif
     } else {
+#ifdef ACL_TYPE_NFS4
       nip->a.nfs = acl_get_file(nip->p, ACL_TYPE_NFS4);
+#endif
+#ifdef ACL_TYPE_ACCESS
       nip->a.acc = acl_get_file(nip->p, ACL_TYPE_ACCESS);
+#endif
+#ifdef ACL_TYPE_DEFAULT
       nip->a.def = acl_get_file(nip->p, ACL_TYPE_DEFAULT);
+#endif
     }
   }
   
@@ -1224,6 +1250,7 @@ int node_print(const char *key,
       printf("      Mtime = %ld\n", nip->s.st_mtime);
     }
     
+#ifdef ACL_TYPE_NFS4
     if (nip->a.nfs) {
       puts("    NFSv4/ZFS ACL:");
       char *t = acl_to_text(nip->a.nfs, NULL);
@@ -1231,7 +1258,8 @@ int node_print(const char *key,
 	fputs(t, stdout);
       acl_free(t);
     }
-    
+#endif
+#ifdef ACL_TYPE_ACESS
     if (nip->a.acc) {
       puts("    POSIX Access ACL:");
       char *t = acl_to_text(nip->a.acc, NULL);
@@ -1239,6 +1267,8 @@ int node_print(const char *key,
 	fputs(t, stdout);
       acl_free(t);
     }
+#endif
+#ifdef ACL_TYPE_DEFAULT
     if (nip->a.def) {
       puts("    POSIX Default ACL:");
       char *t = acl_to_text(nip->a.def, NULL);
@@ -1246,6 +1276,7 @@ int node_print(const char *key,
 	fputs(t, stdout);
       acl_free(t);
     }
+#endif
 #ifdef EXTATTR_NAMESPACE_SYSTEM
     if (nip->x.sys && btree_entries(nip->x.sys) > 0) {
       puts("    System Attributes:");
@@ -1461,13 +1492,15 @@ node_compare(NODE *a,
 #endif
   }
 
+#ifdef UF_ARCHIVE
   if (f_flags) {
     if ((a->s.st_flags & ~UF_ARCHIVE) != (b->s.st_flags & ~UF_ARCHIVE))
       d |= 0x10000000;
     if (f_flags > 1 && a->s.st_flags & UF_ARCHIVE)
       d |= 0x20000000;
   }
-    
+#endif
+  
   return d;
 }
 
@@ -2413,7 +2446,7 @@ main(int argc,
 	  putchar('\n');
 	}
 	printf("\nDigests:\n  ");
-	for (k = DIGEST_TYPE_NONE; k <= DIGEST_TYPE_SHA512; k++)
+	for (k = DIGEST_TYPE_NONE; k <= DIGEST_TYPE_BEST; k++)
 	  printf("%s%s", (k != DIGEST_TYPE_NONE ? ", " : ""), digest_type2str(k));
 	putchar('\n');
 	puts("\nUsage:");
