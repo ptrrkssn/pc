@@ -1,11 +1,11 @@
-pc/pcp/pct - or something...
+pc/pcp/pcsp/pcln - or something (what should it be called?)
 
-Peter's Clone Tool
+Peter's Copy/Clone/Sync Program
 
 This is a tool similar to cp but with a number of added features like a mirror
 mode (inspired by rsync, but only locally). It understands ACLs, Extended
-Attributes & File Flags and tries to avoid/copying files unless it has been
-modified/differs. 
+Attributes & File Flags (depending on OS & filesystem support) and tries
+to avoid/copying files unless it has been modified/differs from the source. 
 
 
 USAGE
@@ -51,6 +51,13 @@ EXAMPLES
 
   # Verbose, archive-mode, merge dir-a & dir-b contents
   pc --verbose=2 --archive --digest=SHA256 dir-a/ dir-b/ dest-dir
+
+
+PLATFORMS
+
+- FreeBSD (tested on 12.2)
+- Linux (tested on Ubuntu 20.04)
+- MacOS (tested on 10.15)
 
 
 AUTHOR
