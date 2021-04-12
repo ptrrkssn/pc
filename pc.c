@@ -581,6 +581,7 @@ file_copy(const char *srcpath,
   
   sbytes = 0;
   tbytes = 0;
+
 #if USE_AIO
   /* Start first read */
   memset(&cb, 0, sizeof(cb));
@@ -796,23 +797,26 @@ node_update(NODE *src_nip,
       if (S_ISLNK(src_nip->s.st_mode)) {
 #if HAVE_LCHMOD
         xrc = lchmod(dstpath, src_nip->s.st_mode);
-        if (xrc < 0)
-          fprintf(stderr, "%s: Error: %s: lchmod: %s\n",
-                  argv0, dstpath, strerror(errno));
 #else
         xrc = -1;
         errno = ENOSYS;
+#endif
+        if (xrc < 0) {
+          fprintf(stderr, "%s: Error: %s: lchmod: %s\n",
+                  argv0, dstpath, strerror(errno));
+	  if (!f_ignore)
+	    return xrc;
+	  rc = xrc;
+	}
       } else {
         xrc = chmod(dstpath, src_nip->s.st_mode);
-        if (xrc < 0)
+	if (xrc < 0) {
           fprintf(stderr, "%s: Error: %s: chmod: %s\n",
                   argv0, dstpath, strerror(errno));
-      }
-#endif
-      if (xrc < 0) {
-        if (!f_ignore)
-          return xrc;
-        rc = xrc;
+	  if (!f_ignore)
+	    return xrc;
+	  rc = xrc;
+	}
       }
     }
   }
