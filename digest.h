@@ -35,6 +35,7 @@
 
 #include "config.h"
 
+#include <stdint.h>
 #include <sys/types.h>
 
 #if HAVE_ZLIB_H

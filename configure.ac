@@ -30,7 +30,7 @@ AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
 AC_FUNC_MALLOC
 AC_FUNC_REALLOC
 
-AC_CHECK_FUNCS([extattr_get_file getxattr acl_get_file acl aio_read])
+AC_CHECK_FUNCS([utimensat extattr_get_file getxattr acl_get_file acl aio_read])
 
 AC_SEARCH_LIBS([crc32_z], [z])
 AC_SEARCH_LIBS([adler32_z], [z])
