@@ -472,7 +472,7 @@ file_copy(const char *srcpath,
   
   tbytes += sbytes;
   if (f_verbose > 1)
-    printf("  %ld bytes copied\n", tbytes);
+    printf("  %lld bytes copied\n", (long long) tbytes);
   
  End:
   if (dst_fd >= 0)
@@ -651,19 +651,33 @@ node_update(NODE *src_nip,
   }
   
   if (f_times > 1) {
-    struct timespec times[2];
-
-    if (!dst_nip ||
-	timespec_compare(&src_nip->s.st_mtim, &dst_nip->s.st_mtim) ||
-	timespec_compare(&src_nip->s.st_atim, &dst_nip->s.st_atim)) {
+    if (!dst_nip
+#ifdef AT_SYMLINK_NOFOLLOW
+	|| timespec_compare(&src_nip->s.st_mtim, &dst_nip->s.st_mtim) 
+	|| timespec_compare(&src_nip->s.st_atim, &dst_nip->s.st_atim)) {
+      struct timespec times[2];
+      
       times[0] = src_nip->s.st_atim;
       times[1] = src_nip->s.st_mtim;
-      if (utimensat(AT_FDCWD, dstpath, times, AT_SYMLINK_NOFOLLOW) < 0) {
+      rc = utimensat(AT_FDCWD, dstpath, times, AT_SYMLINK_NOFOLLOW);
+      if (rc < 0) {
 	fprintf(stderr, "%s: Error: utimensat(%s): %s\n",
 		argv0, dstpath, strerror(errno));
-	rc = -1;
-	if (!f_ignore)
-	  return rc;
+#else
+	|| difftime(src_nip->s.st_mtime, dst_nip->s.st_mtime)
+	|| difftime(src_nip->s.st_mtime, dst_nip->s.st_mtime)) {
+      struct timeval times[2];
+      
+      times[0].tv_sec = src_nip->s.st_atime;
+      times[0].tv_usec = 0;
+      times[1].tv_sec = src_nip->s.st_mtime;
+      times[1].tv_usec = 0;
+      rc = utimes(dstpath, times);
+      if (rc < 0) {
+	fprintf(stderr, "%s: Error: utimens(%s): %s\n",
+		argv0, dstpath, strerror(errno));
+#endif
+	return f_ignore ? 0 : rc;
       }
     }
   }
@@ -671,22 +685,20 @@ node_update(NODE *src_nip,
 #ifdef UF_ARCHIVE
   if (f_flags) {
     if (!dst_nip || (src_nip->s.st_flags & ~UF_ARCHIVE) != (dst_nip->s.st_flags & ~UF_ARCHIVE)) {
-      if (lchflags(dstpath, src_nip->s.st_flags) < 0) {
+      rc = lchflags(dstpath, src_nip->s.st_flags);
+      if (rc < 0) {
 	fprintf(stderr, "%s: Error: %s: lchflags: %s\n",
 		argv0, dstpath, strerror(errno));
-	rc = -1;
-	if (!f_ignore)
-	  return rc;
+	return f_ignore ? 0 : rc;
       }
     }
     
     if (f_flags > 1 && (src_nip->s.st_flags & UF_ARCHIVE)) {
-      if (lchflags(src_nip->p, src_nip->s.st_flags & ~UF_ARCHIVE) < 0) {
+      rc = lchflags(src_nip->p, src_nip->s.st_flags & ~UF_ARCHIVE);
+      if (rc < 0) {
 	fprintf(stderr, "%s: Error: %s: lchflags: %s\n",
 		argv0, src_nip->p, strerror(errno));
-	rc = -1;
-	if (!f_ignore)
-	  return rc;
+	return f_ignore ? 0 : rc;
       }
     }
   }
@@ -830,12 +842,18 @@ node_free(void *vp) {
   if (nip->l)
     free(nip->l);
 
+#ifdef ACL_TYPE_NFS4
   if (nip->a.nfs)
     acl_free(nip->a.nfs);
+#endif
+#ifdef ACL_TYPE_ACCESS
   if (nip->a.acc)
     acl_free(nip->a.acc);
+#endif
+#ifdef ACL_TYPE_DEFAULT
   if (nip->a.def)
     acl_free(nip->a.def);
+#endif
 
 #ifdef EXTATTR_NAMESPACE_SYSTEM
   if (nip->x.sys)
@@ -876,18 +894,22 @@ node_get(NODE *nip,
   if (nip->l)
     free(nip->l);
   nip->l = NULL;
-  
+
+#ifdef ACL_TYPE_NFS4
   if (nip->a.nfs)
     acl_free(nip->a.nfs);
   nip->a.nfs = NULL;
-  
+#endif
+#ifdef ACL_TYPE_ACCESS
   if (nip->a.acc)
     acl_free(nip->a.acc);
   nip->a.acc = NULL;
-  
+#endif
+#ifdef ACL_TYPE_DEFAULT
   if (nip->a.def)
     acl_free(nip->a.def); 
   nip->a.def = NULL;
+#endif
 
 #ifdef EXTATTR_NAMESPACE_SYSTEM
   if (nip->x.sys)
