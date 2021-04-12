@@ -21,24 +21,29 @@ OBJS = pc.o btree.o digest.o
 
 all: pc
 
-configure: configure.ac
-	autoconf && autoheader
 
-config.h: config.h.in configure
-	./configure
-
-pc.o: pc.c digest.h btree.h config.h
-digest.o: digest.c digest.h config.h
-btree.o: btree.c btree.h config.h
+pc.o: pc.c digest.h btree.h config.h Makefile
+digest.o: digest.c digest.h config.h Makefile
+btree.o: btree.c btree.h config.h Makefile
 
 pc: $(OBJS)
 	$(CC) -o pc $(OBJS) $(LIBS)
 
 
+
+reconfigure: configure config.h.in
+
+configure: configure.ac
+	autoconf
+
+config.h.in: configure.ac
+	autoheader
+
+
 clean:
 	-rm -fr *.o pc \#* *~ core t
 
-distclean: clean
+distclean: reconfigure clean
 	-rm -fr config.log config.status Makefile config.h autom4te.cache
 
 

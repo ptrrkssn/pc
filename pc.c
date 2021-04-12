@@ -44,7 +44,7 @@
 #include <fcntl.h>
 #include <time.h>
 
-#if HAVE_AIO_H
+#if defined(HAVE_AIO_H)
 #include <aio.h>
 #endif
 
@@ -54,11 +54,11 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#if HAVE_SYS_VNODE_H
+#if defined(HAVE_SYS_VNODE_H)
 #include <sys/vnode.h>
 #endif
 
-#if HAVE_SYS_ACL_H
+#if defined(HAVE_SYS_ACL_H)
 #include <sys/acl.h>
 #endif
 
@@ -79,21 +79,21 @@ typedef struct node {
   struct stat s;	/* Stat info */
   char *l;		/* Symbolic link content */
   struct {
-#ifdef ACL_TYPE_NFS4
+#if defined(ACL_TYPE_NFS4)
     acl_t nfs;		/* NFSv4 / ZFS */
 #endif
-#ifdef ACL_TYPE_ACCESS
+#if defined(ACL_TYPE_ACCESS)
     acl_t acc;		/* POSIX */
 #endif
-#ifdef ACL_TYPE_DEFAULT
+#if defined(ACL_TYPE_DEFAULT)
     acl_t def;		/* POSIX */
 #endif
   } a;
   struct {
-#ifdef EXTATTR_NAMESPACE_SYSTEM
+#if defined(EXTATTR_NAMESPACE_SYSTEM)
     BTREE *sys;		/* System Extended Attributes */
 #endif
-#ifdef EXTATTR_NAMESPACE_USER
+#if defined(EXTATTR_NAMESPACE_USER)
     BTREE *usr;		/* User Extended Attributes */
 #endif
   } x;
@@ -557,7 +557,7 @@ file_copy(const char *srcpath,
   off_t sbytes, tbytes;
   int src_fd = -1, dst_fd = -1, rc = -1;
   int holed = 0;
-#if USE_AIO
+#if HAVE_AIO_READ
   char bufv[2][128*1024];
   struct aiocb cb[2], *cbp;
   int ap;
@@ -585,7 +585,7 @@ file_copy(const char *srcpath,
   sbytes = 0;
   tbytes = 0;
 
-#if USE_AIO
+#if defined(HAVE_AIO_READ)
   /* Start first read */
   memset(&cb, 0, sizeof(cb));
   cb[0].aio_fildes = src_fd;
@@ -830,7 +830,7 @@ node_update(NODE *src_nip,
     aub.fd = -1;
     aub.pn = dstpath;
     
-#ifdef EXTATTR_NAMESPACE_SYSTEM
+#if defined(EXTATTR_NAMESPACE_SYSTEM)
     if (src_nip->x.sys) {
       aub.ns = EXTATTR_NAMESPACE_SYSTEM;
       aub.attrs = dst_nip ? dst_nip->x.sys : NULL;
@@ -851,7 +851,7 @@ node_update(NODE *src_nip,
       }
     }
 #endif
-#ifdef EXTATTR_NAMESPACE_USER
+#if defined(EXTATTR_NAMESPACE_USER)
     if (src_nip->x.usr) {
       aub.ns = EXTATTR_NAMESPACE_USER;
       aub.attrs = dst_nip ? dst_nip->x.usr : NULL;
@@ -875,7 +875,7 @@ node_update(NODE *src_nip,
   }
   
   if (f_acls) {
-#ifdef ACL_TYPE_NFS4
+#if defined(ACL_TYPE_NFS4)
     if (src_nip->a.nfs) {
       if (!dst_nip ||
           !dst_nip->a.nfs ||
@@ -907,7 +907,7 @@ node_update(NODE *src_nip,
       }
     }
 #endif
-#ifdef ACL_TYPE_ACCESS
+#if defined(ACL_TYPE_ACCESS)
     if (src_nip->a.acc) {
       if (!dst_nip ||
           !dst_nip->a.acc ||
@@ -939,7 +939,7 @@ node_update(NODE *src_nip,
       }
     }
 #endif
-#ifdef ACL_TYPE_DEFAULT
+#if defined(ACL_TYPE_DEFAULT)
     if (src_nip->a.def) {
       if (!dst_nip ||
           !dst_nip->a.def ||
@@ -974,9 +974,9 @@ node_update(NODE *src_nip,
   }
   
   if (f_times > 1) {
-#if HAVE_UTIMENSAT
+#if defined(HAVE_UTIMENSAT)
     if (!dst_nip ||
-#ifdef __APPLE__
+#if defined(__APPLE__)
         timespec_compare(&src_nip->s.st_mtimespec, &dst_nip->s.st_mtimespec) ||
         timespec_compare(&src_nip->s.st_atimespec, &dst_nip->s.st_atimespec)
 #else
@@ -986,7 +986,7 @@ node_update(NODE *src_nip,
         ) {
       struct timespec times[2];
       
-#ifdef __APPLE__
+#if defined(__APPLE__)
       times[0] = src_nip->s.st_atimespec;
       times[1] = src_nip->s.st_mtimespec;
 #else
@@ -1112,7 +1112,7 @@ attrs_get(const char *objpath,
     ATTR *ad;
     ssize_t adsize;
 
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__)
     len = *ap++; /* 1 byte = length */
 #else
     len = strlen((char *) ap); /* NUL-terminated strings */
@@ -1126,7 +1126,7 @@ attrs_get(const char *objpath,
     memcpy(an, ap, len);
     an[len] = '\0';
     ap += len;
-#ifndef __FreeBSD__
+#if !defined(__FreeBSD__)
     ++ap;
 #endif
 
@@ -1198,24 +1198,24 @@ node_free(void *vp) {
   if (nip->l)
     free(nip->l);
 
-#ifdef ACL_TYPE_NFS4
+#if defined(ACL_TYPE_NFS4)
   if (nip->a.nfs)
     acl_free(nip->a.nfs);
 #endif
-#ifdef ACL_TYPE_ACCESS
+#if defined(ACL_TYPE_ACCESS)
   if (nip->a.acc)
     acl_free(nip->a.acc);
 #endif
-#ifdef ACL_TYPE_DEFAULT
+#if defined(ACL_TYPE_DEFAULT)
   if (nip->a.def)
     acl_free(nip->a.def);
 #endif
 
-#ifdef EXTATTR_NAMESPACE_SYSTEM
+#if defined(EXTATTR_NAMESPACE_SYSTEM)
   if (nip->x.sys)
     btree_destroy(nip->x.sys);
 #endif
-#ifdef EXTATTR_NAMESPACE_USER
+#if defined(EXTATTR_NAMESPACE_USER)
   if (nip->x.usr)
     btree_destroy(nip->x.usr);
 #endif
@@ -1251,29 +1251,29 @@ node_get(NODE *nip,
     free(nip->l);
   nip->l = NULL;
 
-#ifdef ACL_TYPE_NFS4
+#if defined(ACL_TYPE_NFS4)
   if (nip->a.nfs)
     acl_free(nip->a.nfs);
   nip->a.nfs = NULL;
 #endif
-#ifdef ACL_TYPE_ACCESS
+#if defined(ACL_TYPE_ACCESS)
   if (nip->a.acc)
     acl_free(nip->a.acc);
   nip->a.acc = NULL;
 #endif
-#ifdef ACL_TYPE_DEFAULT
+#if defined(ACL_TYPE_DEFAULT)
   if (nip->a.def)
     acl_free(nip->a.def); 
   nip->a.def = NULL;
 #endif
 
-#ifdef EXTATTR_NAMESPACE_SYSTEM
+#if defined(EXTATTR_NAMESPACE_SYSTEM)
   if (nip->x.sys)
     btree_destroy(nip->x.sys);
   nip->x.sys = NULL;
 #endif
   
-#ifdef EXTATTR_NAMESPACE_USER
+#if defined(EXTATTR_NAMESPACE_USER)
   if (nip->x.usr)
     btree_destroy(nip->x.usr);
   nip->x.usr = NULL;
@@ -1305,14 +1305,14 @@ node_get(NODE *nip,
   
   if (f_acls) {
     if (S_ISLNK(nip->s.st_mode)) {
-#if HAVE_ACL_GET_LINK_NP
-#ifdef ACL_TYPE_NFS4
+#if defined(HAVE_ACL_GET_LINK_NP)
+#if defined(ACL_TYPE_NFS4)
       nip->a.nfs = acl_get_link_np(nip->p, ACL_TYPE_NFS4);
 #endif
-#ifdef ACL_TYPE_ACCESS
+#if defined(ACL_TYPE_ACCESS)
       nip->a.acc = acl_get_link_np(nip->p, ACL_TYPE_ACCESS);
 #endif
-#ifdef ACL_TYPE_ACCESS
+#if defined(ACL_TYPE_ACCESS)
       nip->a.def = acl_get_link_np(nip->p, ACL_TYPE_DEFAULT);
 #endif
 #else
@@ -1320,23 +1320,23 @@ node_get(NODE *nip,
       return -1;
 #endif
     } else {
-#ifdef ACL_TYPE_NFS4
+#if defined(ACL_TYPE_NFS4)
       nip->a.nfs = acl_get_file(nip->p, ACL_TYPE_NFS4);
 #endif
-#ifdef ACL_TYPE_ACCESS
+#if defined(ACL_TYPE_ACCESS)
       nip->a.acc = acl_get_file(nip->p, ACL_TYPE_ACCESS);
 #endif
-#ifdef ACL_TYPE_DEFAULT
+#if defined(ACL_TYPE_DEFAULT)
       nip->a.def = acl_get_file(nip->p, ACL_TYPE_DEFAULT);
 #endif
     }
   }
   
   if (f_attrs) {
-#ifdef EXTATTR_NAMESPACE_SYSTEM
+#if defined(EXTATTR_NAMESPACE_SYSTEM)
     nip->x.sys = attrs_get(nip->p, S_ISLNK(nip->s.st_mode), EXTATTR_NAMESPACE_SYSTEM);
 #endif
-#ifdef EXTATTR_NAMESPACE_USER
+#if defined(EXTATTR_NAMESPACE_USER)
     nip->x.usr = attrs_get(nip->p, S_ISLNK(nip->s.st_mode), EXTATTR_NAMESPACE_USER);
 #endif
   }
@@ -1531,7 +1531,7 @@ mode2str(NODE *nip) {
   if (S_ISSOCK(sp->st_mode))
     return "s";
 
-#ifdef S_ISWHT
+#if defined(S_ISWHT)
   if (S_ISWHT(sp->st_mode))
     return "w";
 #endif
@@ -1601,30 +1601,30 @@ int node_print(const char *key,
     
   printf(" [%s", mode2str(nip));
 
-#ifdef ACL_TYPE_NFS4
+#if defined(ACL_TYPE_NFS4)
   if (nip->a.nfs)
     putchar('N');
 #endif
-#ifdef ACL_TYPE_ACCESS
+#if defined(ACL_TYPE_ACCESS)
   if (nip->a.acc)
     putchar('A');
 #endif
-#ifdef ACL_TYPE_DEFAULT
+#if defined(ACL_TYPE_DEFAULT)
   if (nip->a.def)
     putchar('D');
 #endif
-#ifdef EXTATTR_NAMESPACE_SYSTEM
+#if defined(EXTATTR_NAMESPACE_SYSTEM)
   if (nip->x.sys && btree_entries(nip->x.sys) > 0)
     putchar('S');
 #endif
-#ifdef EXTATTR_NAMESPACE_USER
+#if defined(EXTATTR_NAMESPACE_USER)
   if (nip->x.usr && btree_entries(nip->x.usr) > 0)
     putchar('U');
 #endif
 
   putchar(']');
 
-#ifdef UF_ARCHIVE
+#if defined(HAVE_LCHFLAGS)
   if (nip->s.st_flags)
     printf(" {%s}", fflagstostr(nip->s.st_flags));
 #endif
@@ -1643,7 +1643,7 @@ int node_print(const char *key,
       printf("      Mtime = %s\n", time2str(nip->s.st_mtime, tmpbuf, sizeof(tmpbuf), 1));
     }
     
-#ifdef ACL_TYPE_NFS4
+#if defined(ACL_TYPE_NFS4)
     if (nip->a.nfs) {
       puts("    NFSv4/ZFS ACL:");
       char *t = acl_to_text(nip->a.nfs, NULL);
@@ -1652,7 +1652,7 @@ int node_print(const char *key,
       acl_free(t);
     }
 #endif
-#ifdef ACL_TYPE_ACESS
+#if defined(ACL_TYPE_ACESS)
     if (nip->a.acc) {
       puts("    POSIX Access ACL:");
       char *t = acl_to_text(nip->a.acc, NULL);
@@ -1661,7 +1661,7 @@ int node_print(const char *key,
       acl_free(t);
     }
 #endif
-#ifdef ACL_TYPE_DEFAULT
+#if defined(ACL_TYPE_DEFAULT)
     if (nip->a.def) {
       puts("    POSIX Default ACL:");
       char *t = acl_to_text(nip->a.def, NULL);
@@ -1670,13 +1670,13 @@ int node_print(const char *key,
       acl_free(t);
     }
 #endif
-#ifdef EXTATTR_NAMESPACE_SYSTEM
+#if defined(EXTATTR_NAMESPACE_SYSTEM)
     if (nip->x.sys && btree_entries(nip->x.sys) > 0) {
       puts("    System Attributes:");
       btree_foreach(nip->x.sys, attr_print, NULL);
     }
 #endif
-#ifdef EXTATTR_NAMESPACE_USER
+#if defined(EXTATTR_NAMESPACE_USER)
     if (nip->x.usr && btree_entries(nip->x.usr) > 0) {
       puts("    User Attributes:");
       btree_foreach(nip->x.usr, attr_print, NULL);
@@ -1865,33 +1865,33 @@ node_compare(NODE *a,
 
   /* Check ACLs */
   if (f_acls) {
-#ifdef ACL_TYPE_NFS4
+#if defined(ACL_TYPE_NFS4)
     if (a->a.nfs && acl_compare(a->a.nfs, b->a.nfs))
       d |= 0x00100000;
 #endif
-#ifdef ACL_TYPE_ACCESS
+#if defined(ACL_TYPE_ACCESS)
     if (a->a.acc && acl_compare(a->a.acc, b->a.acc))
       d |= 0x00200000;
 #endif
-#ifdef ACL_TYPE_DEFAULT
+#if defined(ACL_TYPE_DEFAULT)
     if (a->a.def && acl_compare(a->a.def, b->a.def))
       d |= 0x00400000;
 #endif
   }
 
   if (f_attrs) {
-#ifdef EXTATTR_NAMESPACE_SYSTEM
+#if defined(EXTATTR_NAMESPACE_SYSTEM)
     /* Check Extended Attributes */
     if (a->x.sys && attr_compare(a->x.sys, b->x.sys))
       d |= 0x01000000;
 #endif
-#ifdef EXTATTR_NAMESPACE_USER
+#if defined(EXTATTR_NAMESPACE_USER)
     if (a->x.usr && attr_compare(a->x.usr, b->x.usr))
       d |= 0x02000000;
 #endif
   }
 
-#ifdef UF_ARCHIVE
+#if defined(UF_ARCHIVE)
   if (f_flags) {
     if ((a->s.st_flags & ~UF_ARCHIVE) != (b->s.st_flags & ~UF_ARCHIVE))
       d |= 0x10000000;
@@ -2516,9 +2516,15 @@ OPTION opts[] = {
   { 'x', "expunge",     NULL,        "Remove/replace deleted/changed objects", 0, NULL },
   { 'u', "no-copy",     NULL,        "Do not copy file contents", 0, NULL },
   { 'z', "zero-fill",   NULL,        "Try to generate zero-holed files", 0, NULL },
+#if defined(HAVE_ACL_GET_FILE) || defined(HAVE_ACL)
   { 'A', "acls",        NULL,        "Copy ACLs", 0, NULL },
+#endif
+#if defined(HAVE_GETXATTR) || defined(HAVE_EXTATTR_GET_FILE)
   { 'X', "attributes",  NULL,        "Copy extended attributes", 0, NULL },
+#endif
+#if defined(HAVE_LCHFLAGS)
   { 'F', "file-flags",  NULL,        "Copy file flags (and check/update 'uarch' if '-FF')", 0, NULL },
+#endif
   { 'a', "archive",     NULL,        "Archive mode (equal to '-rpottAXFF')", 0, NULL },
   { 'M', "mirror",      NULL,        "Mirror mode (equal to '-ax')", 0, NULL },
   { 'B', "buffer-size", "<size>",    "Set copy buffer size", OPT_SIZE, &f_bufsize },
@@ -2650,15 +2656,16 @@ main(int argc,
       case 'A':
 	++f_acls;
 	break;
-
+#if defined(HAVE_GETXATTR) || defined(HAVE_EXTATTR_GET_FILE)
       case 'X':
 	++f_attrs;
 	break;
-
+#endif
+#if defined(HAVE_LCHFLAGS)
       case 'F':
 	++f_flags;
 	break;
-
+#endif
       case 'M':
 	f_remove = 1;
 	/* no break */
