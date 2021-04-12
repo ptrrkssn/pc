@@ -652,7 +652,7 @@ node_update(NODE *src_nip,
   
   if (f_times > 1) {
     if (!dst_nip
-#ifdef AT_SYMLINK_NOFOLLOW
+#if defined(st_mtime) && defined(st_atime)
 	|| timespec_compare(&src_nip->s.st_mtim, &dst_nip->s.st_mtim) 
 	|| timespec_compare(&src_nip->s.st_atim, &dst_nip->s.st_atim)) {
       struct timespec times[2];
@@ -1240,25 +1240,33 @@ int node_print(const char *key,
     
   printf(" [%s", mode2str(nip));
 
-  if (nip->a.nfs || nip->a.acc || nip->a.def) {
-    if (nip->a.nfs)
-      putchar('N');
-    if (nip->a.acc)
-      putchar('A');
-    if (nip->a.def)
-      putchar('D');
+#ifdef ACL_TYPE_NFS4
+  if (nip->a.nfs)
+    putchar('N');
+#endif
+#ifdef ACL_TYPE_ACCESS
+  if (nip->a.acc)
+    putchar('A');
+#endif
+#ifdef ACL_TYPE_DEFAULT
+  if (nip->a.def)
+    putchar('D');
+#endif
 #ifdef EXTATTR_NAMESPACE_SYSTEM
-    if (nip->x.sys && btree_entries(nip->x.sys) > 0)
-      putchar('S');
+  if (nip->x.sys && btree_entries(nip->x.sys) > 0)
+    putchar('S');
 #endif
 #ifdef EXTATTR_NAMESPACE_USER
-    if (nip->x.usr && btree_entries(nip->x.usr) > 0)
-      putchar('U');
+  if (nip->x.usr && btree_entries(nip->x.usr) > 0)
+    putchar('U');
 #endif
-  }
+
   putchar(']');
+
+#ifdef UF_ARCHIVE
   if (nip->s.st_flags)
     printf(" {%s}", fflagstostr(nip->s.st_flags));
+#endif
   putchar('\n');
   
   if (verbose > 1) {
@@ -1494,12 +1502,18 @@ node_compare(NODE *a,
 
   /* Check ACLs */
   if (f_acls) {
+#ifdef ACL_TYPE_NFS4
     if (a->a.nfs && acl_compare(a->a.nfs, b->a.nfs))
       d |= 0x00100000;
+#endif
+#ifdef ACL_TYPE_ACCESS
     if (a->a.acc && acl_compare(a->a.acc, b->a.acc))
       d |= 0x00200000;
+#endif
+#ifdef ACL_TYPE_DEFAULT
     if (a->a.def && acl_compare(a->a.def, b->a.def))
       d |= 0x00400000;
+#endif
   }
 
   if (f_attrs) {
