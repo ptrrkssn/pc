@@ -1,5 +1,5 @@
 * Clean up the code a bit
 * manual page
 * Smarter/more efficient comparision of ACLs
-* Finish MacOS support
-* Add support for Linux, OmniOS
+* Finish MacOS & Linux support
+* Add support for OmniOS
