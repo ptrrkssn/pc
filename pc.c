@@ -497,9 +497,18 @@ acl_compare(acl_t a,
   /* Hack, do a better/faster comparision */
   as = acl_to_text(a, NULL);
   bs = acl_to_text(b, NULL);
+
+  if (!as && bs) {
+    free(bs);
+    return -1;
+  }
   
-  if (strcmp(as, bs) != 0)
-    rc = 1;
+  if (as && !bs) {
+    free(as);
+    return 1;
+  }
+
+  rc = strcmp(as, bs);
   
   acl_free(as);
   acl_free(bs);
@@ -881,11 +890,9 @@ node_update(NODE *src_nip,
   if (f_acls) {
 #if defined(ACL_TYPE_NFS4)
     if (src_nip->a.nfs) {
-      if (!dst_nip ||
-          !dst_nip->a.nfs ||
-          acl_compare(src_nip->a.nfs, dst_nip->a.nfs) != 0) {
+      if (!dst_nip || acl_compare(src_nip->a.nfs, dst_nip->a.nfs) != 0) {
         if (S_ISLNK(src_nip->s.st_mode)) {
-#if HAVE_ACL_SET_LINK_NP
+#if defined(HAVE_ACL_SET_LINK_NP)
           xrc = acl_set_link_np(dstpath, ACL_TYPE_NFS4, src_nip->a.nfs);
 #else
           errno = ENOSYS;
@@ -898,27 +905,27 @@ node_update(NODE *src_nip,
               return xrc;
             rc = xrc;
           }
-        }
-      } else {
-        xrc = acl_set_file(dstpath, ACL_TYPE_NFS4, src_nip->a.nfs);
-        if (xrc < 0) {
-          fprintf(stderr, "%s: Error: %s: acl_set_file(ACL_TYPE_NFS4): %s\n",
-                  argv0, dstpath, strerror(errno));
-          if (!f_ignore)
-            return xrc;
-          rc = xrc;
-        }
+        } else {
+	  fprintf(stderr, "setting ACL on file '%s'\n", dstpath);
+	  
+	  xrc = acl_set_file(dstpath, ACL_TYPE_NFS4, src_nip->a.nfs);
+	  if (xrc < 0) {
+	    fprintf(stderr, "%s: Error: %s: acl_set_file(ACL_TYPE_NFS4): %s\n",
+		    argv0, dstpath, strerror(errno));
+	    if (!f_ignore)
+	      return xrc;
+	    rc = xrc;
+	  }
+	}
       }
     }
 #endif
 #if defined(ACL_TYPE_ACCESS)
     if (src_nip->a.acc) {
-      if (!dst_nip ||
-          !dst_nip->a.acc ||
-          acl_compare(src_nip->a.acc, dst_nip->a.acc) != 0) {
+      if (!dst_nip || acl_compare(src_nip->a.acc, dst_nip->a.acc) != 0) {
         if (S_ISLNK(src_nip->s.st_mode)) {
 #if HAVE_ACL_SET_LINK_NP
-          xrc = acl_set_link_np(dstpath, ACL_TYPE_ACCESS, src_nip->a.nfs);
+          xrc = acl_set_link_np(dstpath, ACL_TYPE_ACCESS, src_nip->a.acc);
 #else
           errno = ENOSYS;
           xrc = -1;
@@ -945,12 +952,10 @@ node_update(NODE *src_nip,
 #endif
 #if defined(ACL_TYPE_DEFAULT)
     if (src_nip->a.def) {
-      if (!dst_nip ||
-          !dst_nip->a.def ||
-          acl_compare(src_nip->a.def, dst_nip->a.def) != 0) {
+      if (!dst_nip || acl_compare(src_nip->a.def, dst_nip->a.def) != 0) {
         if (S_ISLNK(src_nip->s.st_mode)) {
 #if HAVE_ACL_SET_LINK_NP
-          xrc = acl_set_link_np(dstpath, ACL_TYPE_DEFAULT, src_nip->a.nfs);
+          xrc = acl_set_link_np(dstpath, ACL_TYPE_DEFAULT, src_nip->a.def);
 #else
           errno = ENOSYS;
           xrc = -1;
@@ -1196,35 +1201,48 @@ node_free(void *vp) {
   if (!nip)
     return;
 
-  if (nip->p)
+  if (nip->p) {
     free(nip->p);
+    nip->p = NULL;
+  }
   
-  if (nip->l)
+  if (nip->l) {
     free(nip->l);
+    nip->l = NULL;
+  }
 
 #if defined(ACL_TYPE_NFS4)
-  if (nip->a.nfs)
+  if (nip->a.nfs) {
     acl_free(nip->a.nfs);
+    nip->a.nfs = NULL;
+  }
 #endif
 #if defined(ACL_TYPE_ACCESS)
-  if (nip->a.acc)
+  if (nip->a.acc) {
     acl_free(nip->a.acc);
+    nip->a.acc = NULL;
+  }
 #endif
 #if defined(ACL_TYPE_DEFAULT)
-  if (nip->a.def)
+  if (nip->a.def) {
     acl_free(nip->a.def);
+    nip->a.def = NULL;
+  }
 #endif
 
 #if defined(EXTATTR_NAMESPACE_SYSTEM)
-  if (nip->x.sys)
+  if (nip->x.sys) {
     btree_destroy(nip->x.sys);
+    nip->x.sys = NULL;
+  }
 #endif
 #if defined(EXTATTR_NAMESPACE_USER)
-  if (nip->x.usr)
+  if (nip->x.usr) {
     btree_destroy(nip->x.usr);
+    nip->x.user = NULL;
+  }
 #endif
-
-  memset(nip, 0, sizeof(*nip));
+  
   free(nip);
 }
 
@@ -1251,40 +1269,45 @@ node_get(NODE *nip,
     return -1;
   }
 
-  if (nip->l)
+  if (nip->l) {
     free(nip->l);
-  nip->l = NULL;
+    nip->l = NULL;
+  }
 
 #if defined(ACL_TYPE_NFS4)
-  if (nip->a.nfs)
+  if (nip->a.nfs) {
     acl_free(nip->a.nfs);
-  nip->a.nfs = NULL;
+    nip->a.nfs = NULL;
+  }
 #endif
 #if defined(ACL_TYPE_ACCESS)
-  if (nip->a.acc)
+  if (nip->a.acc) {
     acl_free(nip->a.acc);
-  nip->a.acc = NULL;
+    nip->a.acc = NULL;
+  }
 #endif
 #if defined(ACL_TYPE_DEFAULT)
-  if (nip->a.def)
+  if (nip->a.def) {
     acl_free(nip->a.def); 
-  nip->a.def = NULL;
+    nip->a.def = NULL;
+  }
 #endif
 
 #if defined(EXTATTR_NAMESPACE_SYSTEM)
-  if (nip->x.sys)
+  if (nip->x.sys) {
     btree_destroy(nip->x.sys);
-  nip->x.sys = NULL;
+    nip->x.sys = NULL;
+  }
 #endif
   
 #if defined(EXTATTR_NAMESPACE_USER)
-  if (nip->x.usr)
+  if (nip->x.usr) {
     btree_destroy(nip->x.usr);
-  nip->x.usr = NULL;
+    nip->x.usr = NULL;
+  }
 #endif
   
   nip->d.len = 0;
-  
 
   if (lstat(nip->p, &nip->s) < 0)
     return -1;
@@ -1294,7 +1317,6 @@ node_get(NODE *nip,
     ssize_t len;
     
     len = readlink(nip->p, buf, sizeof(buf)-1);
-
     if (len < 0) {
       if (f_verbose)
 	fprintf(stderr, "%s: Error: %s: readlink: %s\n",
@@ -1320,7 +1342,7 @@ node_get(NODE *nip,
       nip->a.def = acl_get_link_np(nip->p, ACL_TYPE_DEFAULT);
 #endif
 #else
-      errno = EINVAL;
+      errno = ENOSYS;
       return -1;
 #endif
     } else {
@@ -1870,15 +1892,15 @@ node_compare(NODE *a,
   /* Check ACLs */
   if (f_acls) {
 #if defined(ACL_TYPE_NFS4)
-    if (a->a.nfs && acl_compare(a->a.nfs, b->a.nfs))
+    if (acl_compare(a->a.nfs, b->a.nfs))
       d |= 0x00100000;
 #endif
 #if defined(ACL_TYPE_ACCESS)
-    if (a->a.acc && acl_compare(a->a.acc, b->a.acc))
+    if (acl_compare(a->a.acc, b->a.acc))
       d |= 0x00200000;
 #endif
 #if defined(ACL_TYPE_DEFAULT)
-    if (a->a.def && acl_compare(a->a.def, b->a.def))
+    if (acl_compare(a->a.def, b->a.def))
       d |= 0x00400000;
 #endif
   }
