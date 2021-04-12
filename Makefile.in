@@ -5,9 +5,18 @@
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
 srcdir = @srcdir@
-VPATH = @srcdir@
+VPATH  = @srcdir@
 
-PREFIX = @prefix@
+DESTDIR =
+PREFIX  = @prefix@
+
+prefix      = ${PREFIX}
+exec_prefix = @exec_prefix@
+datarootdir = @datarootdir@
+
+BINDIR      = @bindir@
+MANDIR      = @mandir@
+MAN1DIR     = ${MANDIR}/man1
 
 CC       = @CC@
 INSTALL  = @INSTALL@
@@ -45,6 +54,10 @@ clean:
 
 distclean: reconfigure clean
 	-rm -fr config.log config.status Makefile config.h autom4te.cache
+
+install:
+	$(INSTALL) -d "$(DESTDIR)$(BINDIR)"
+	$(INSTALL) pc "$(DESTDIR)$(BINDIR)"
 
 
 push:	distclean
