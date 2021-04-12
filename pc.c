@@ -1239,7 +1239,7 @@ node_free(void *vp) {
 #if defined(EXTATTR_NAMESPACE_USER)
   if (nip->x.usr) {
     btree_destroy(nip->x.usr);
-    nip->x.user = NULL;
+    nip->x.usr = NULL;
   }
 #endif
   
