@@ -652,7 +652,7 @@ node_update(NODE *src_nip,
   
   if (f_times > 1) {
     if (!dst_nip
-#if defined(st_mtime) && defined(st_atime)
+#ifdef __FreeBSD__
 	|| timespec_compare(&src_nip->s.st_mtim, &dst_nip->s.st_mtim) 
 	|| timespec_compare(&src_nip->s.st_atim, &dst_nip->s.st_atim)) {
       struct timespec times[2];
@@ -664,15 +664,28 @@ node_update(NODE *src_nip,
 	fprintf(stderr, "%s: Error: utimensat(%s): %s\n",
 		argv0, dstpath, strerror(errno));
 #else
+#ifdef __APPLE__
+	|| timespec_compare(&src_nip->s.st_mtimespec, &dst_nip->s.st_mtimespec) 
+        || timespec_compare(&src_nip->s.st_atimespec, &dst_nip->s.st_atimespec)) {
+#else
 	|| difftime(src_nip->s.st_mtime, dst_nip->s.st_mtime)
-	|| difftime(src_nip->s.st_mtime, dst_nip->s.st_mtime)) {
+        || difftime(src_nip->s.st_mtime, dst_nip->s.st_mtime)) {
+#endif
       struct timeval times[2];
       
       times[0].tv_sec = src_nip->s.st_atime;
-      times[0].tv_usec = 0;
       times[1].tv_sec = src_nip->s.st_mtime;
+#ifdef __APPLE__
+      times[0].tv_usec = src_nip->s.st_atimespec.st_nsec/1000;
+      times[1].tv_usec = src_nip->s.st_mtimespec.st_nsec/1000;
+#else
+      times[0].tv_usec = 0;
       times[1].tv_usec = 0;
-      rc = utimes(dstpath, times);
+#endif
+      if (S_ISLNK(dst_nip->s.st_flags))
+	rc = lutimes(dstpath, times);
+      else
+	rc = utimes(dstpath, times);
       if (rc < 0) {
 	fprintf(stderr, "%s: Error: utimens(%s): %s\n",
 		argv0, dstpath, strerror(errno));
