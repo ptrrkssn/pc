@@ -253,7 +253,6 @@ digest_final(DIGEST *dp,
     
   case DIGEST_STATE_INIT:
   case DIGEST_STATE_UPDATE:
-    
     switch (dp->type) {
     case DIGEST_TYPE_INVALID:
       errno = EINVAL;
@@ -332,9 +331,9 @@ digest_final(DIGEST *dp,
       SHA512_Final(buf, &dp->ctx.sha512);
       rlen = DIGEST_BUFSIZE_SHA512;
       break;
+#endif      
     }
     break;
-#endif      
     
   default:
     errno = EINVAL;

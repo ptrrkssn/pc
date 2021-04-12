@@ -149,6 +149,7 @@ bnode_max(BNODE *n) {
 }
 
 
+#if 0
 /* Locate the previous node of a tree */
 static inline BNODE *
 bnode_prev(BNODE *n) {
@@ -187,6 +188,7 @@ bnode_next(BNODE *n) {
   
   return n;
 }
+#endif
 
 static inline BNODE *
 bnode_delete(BTREE *bt,
