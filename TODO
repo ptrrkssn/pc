@@ -1,5 +1,8 @@
 * Clean up the code a bit
-* manual page
+* Create a manual page
+* Better documentation
 * Smarter/more efficient comparision of ACLs
-* Finish MacOS & Linux support
+* Handle NFSv4 ACLs on Linux
 * Add support for OmniOS
+* Add a remote mode
+* Expand the test suite
