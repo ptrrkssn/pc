@@ -1,7 +1,7 @@
 # Makefile
 
 CC=gcc
-CFLAGS=-g -Wall
+CFLAGS=-O -g -Wall
 
 OBJS=pc.o btree.o digest.o
 

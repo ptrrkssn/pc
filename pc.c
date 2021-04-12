@@ -115,10 +115,10 @@ typedef struct dirpair {
 /* 
  * Extended Attributes 
  */
-typedef struct attrinfo {
+typedef struct attr {
   size_t len;
   unsigned char buf[];
-} ATTRINFO;
+} ATTR;
 
 typedef struct attrupdate {
   int fd;
@@ -209,6 +209,233 @@ strdupcat(const char *str,
   return retval;
 }
 
+
+
+int
+str2size(const char **str,
+	 size_t *vp) {
+  size_t base = 1000, vbm, sbm, v, sv;
+  int rc = 0, rv = 0, sign = 1;
+  char c, i;
+
+  
+  *vp = 0;
+
+  if (**str == '-' && isdigit((*str)[1])) {
+    ++*str;
+    sign = -1;
+  }
+  
+  while (**str && isdigit(**str)) {
+    c = i = 0;
+
+    if ((*str)[0] == '0' && (*str)[1] == 'x') {
+      ++*str;
+      ++*str;
+      
+      rc = sscanf(*str, "%lx%c%c", &v, &c, &i);
+      if (rc < 1)
+	return -1;
+      
+      while (**str && isxdigit(**str))
+	++*str;
+      
+      rv = 1;
+    } else {
+      rc = sscanf(*str, "%ld%c%c", &v, &c, &i);
+      if (rc < 1)
+	return -1;
+      
+      while (**str && isdigit(**str))
+	++*str;
+      
+      rv = 1;
+    }
+
+    if (c) {
+      if (i == 'i') {
+	++*str;
+	base = 1024;
+      }
+    }
+
+    switch (toupper(c)) {
+    case 'K':
+      vbm = base;
+      sbm = 1;
+      break;
+      
+    case 'M':
+      vbm = base*base;
+      sbm = base;
+      break;
+      
+    case 'G':
+      vbm = base*base*base;
+      sbm = base*base;
+      break;
+      
+    case 'T':
+      vbm = base*base*base*base;
+      sbm = base*base*base;
+      break;
+      
+    case 'P':
+      vbm = base*base*base*base;
+      sbm = base*base*base;
+      break;
+      
+    default:
+      c = 0;
+      vbm = 1;
+      sbm = 1;
+      break;
+    }
+
+    v *= vbm;
+    
+    if (c) {
+      int nd = 0;
+      ++*str;
+      sv = 0;
+      while (isdigit(**str)) {
+	sv *= 10;
+	sv += **str - '0';
+	++nd;
+	++*str;
+      }
+      switch (nd) {
+      case 1:
+	sv *= 100;
+	break;
+      case 2:
+	sv *= 10;
+	break;
+      }
+      
+      v += sv*sbm;
+    }
+    
+    *vp += v;
+    
+    if (**str == '+')
+      ++*str;
+    else
+      break;
+  }
+  
+  *vp *= sign;
+  return rv;
+}
+ 
+char *
+size2str(size_t b,
+	 char *buf,
+	 size_t bufsize,
+	int b2f) {
+  int base = 1000;
+  size_t t;
+  
+  
+  if (b2f)
+    base = 1024;
+
+  if (b == 0) {
+    strcpy(buf, "0");
+    return buf;
+  }
+  
+  t = b/base;
+  if (llabs(b) < 10000 && (t*base != b)) {
+    snprintf(buf, bufsize, "%ld", b);
+    return buf;
+  }
+  
+  b /= base;
+  t = b/base;
+  if (llabs(b) < 10000 && (t*base != b)) {
+    snprintf(buf, bufsize, "%ld K%s", b, b2f == 1 ? "i" : "");
+    return buf;
+  }
+  
+  b /= base;
+  t = b/base;
+  if (llabs(b) < 10000 && (t*base != b)) {
+    snprintf(buf, bufsize, "%ld M%s", b, b2f == 1 ? "i" : "");
+    return buf;
+  }
+  
+  b /= base;
+  t = b/base;
+  if (llabs(b) < 10000 && (t*base != b)) {
+    snprintf(buf, bufsize, "%ld G%s", b, b2f == 1 ? "i" : "");
+    return buf;
+  }
+  
+  b /= base;
+  t = b/base;
+  if (llabs(b) < 10000 && (t*base != b)) {
+    snprintf(buf, bufsize, "%ld T%s", b, b2f == 1 ? "i" : "");
+    return buf;
+  }
+  
+  snprintf(buf, bufsize, "%ld P%s", b, b2f == 1 ? "i" : "");
+  return buf;
+}
+
+
+char *
+time2str(time_t t,
+	 char *buf,
+	 size_t bufsize,
+	 int abs_f) {
+  if (abs_f) {
+    struct tm *tp = localtime(&t);
+    
+    strftime(buf, bufsize, "%Y-%m-%d %H:%M:%S", tp);
+    return buf;
+  }
+  
+    
+  if (labs(t) < 120) {
+    snprintf(buf, bufsize, "%lds", t);
+    return buf;
+  }
+
+  t /= 60;
+  if (labs(t) < 120) {
+    snprintf(buf, bufsize, "%ldm", t);
+    return buf;
+  }
+
+  t /= 60;
+  if (labs(t) < 48) {
+    snprintf(buf, bufsize, "%ldh", t);
+    return buf;
+  }
+  
+  t /= 24;
+  if (labs(t) < 14) {
+    snprintf(buf, bufsize, "%ldD", t);
+    return buf;
+  }
+  
+  if (labs(t) < 60) {
+    t /= 7;
+    snprintf(buf, bufsize, "%ldW", t);
+    return buf;
+  }
+
+  if (labs(t) < 365*2) {
+    t /= 30;
+    snprintf(buf, bufsize, "%ldM", t);
+    return buf;
+  }
+
+  t /= 365;
+  snprintf(buf, bufsize, "%ldY", t);
+  return buf;
+}
 
 
 /*
@@ -492,8 +719,8 @@ int
 attr_update(const char *key,
 	    void *vp,
 	    void *xp) {
-  ATTRINFO   *aip = (ATTRINFO *) vp;
-  ATTRINFO   *bip = NULL;
+  ATTR   *aip = (ATTR *) vp;
+  ATTR   *bip = NULL;
   ATTRUPDATE *aup = (ATTRUPDATE *) xp;
 
   
@@ -514,7 +741,7 @@ int
 attr_remove(const char *key,
 	    void *vp,
 	    void *xp) {
-  ATTRINFO   *aip = NULL;
+  ATTR       *aip = NULL;
   ATTRUPDATE *aup = (ATTRUPDATE *) xp;
 
   if (f_debug)
@@ -587,9 +814,9 @@ node_update(NODE *src_nip,
 #ifdef EXTATTR_NAMESPACE_SYSTEM
     if (src_nip->x.sys) {
       aub.ns = EXTATTR_NAMESPACE_SYSTEM;
-      aub.attrs = dst_nip->x.sys;
+      aub.attrs = dst_nip ? dst_nip->x.sys : NULL;
       btree_foreach(src_nip->x.sys, attr_update, &aub);
-      if (f_remove && src_nip->x.sys) {
+      if (f_remove && dst_nip && dst_nip->x.sys) {
 	aub.attrs = src_nip->x.sys;
 	btree_foreach(dst_nip->x.sys, attr_remove, &aub);
       }
@@ -598,9 +825,9 @@ node_update(NODE *src_nip,
 #ifdef EXTATTR_NAMESPACE_USER
     if (src_nip->x.usr) {
       aub.ns = EXTATTR_NAMESPACE_USER;
-      aub.attrs = dst_nip->x.usr;
+      aub.attrs = dst_nip ? dst_nip->x.usr : NULL;
       btree_foreach(src_nip->x.usr, attr_update, &aub);
-      if (f_remove && dst_nip->x.usr) {
+      if (f_remove && dst_nip && dst_nip->x.usr) {
 	aub.attrs = src_nip->x.usr;
 	btree_foreach(dst_nip->x.usr, attr_remove, &aub);
       }
@@ -611,7 +838,7 @@ node_update(NODE *src_nip,
   if (f_acls) {
 #ifdef ACL_TYPE_NFS4
     if (src_nip->a.nfs) {
-      if (!dst_nip->a.nfs || acl_compare(src_nip->a.nfs, dst_nip->a.nfs) != 0) {
+      if (!dst_nip || !dst_nip->a.nfs || acl_compare(src_nip->a.nfs, dst_nip->a.nfs) != 0) {
 	if (acl_set_link_np(dstpath, ACL_TYPE_NFS4, src_nip->a.nfs) < 0) {
 	  fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_NFS4): %s\n",
 		  argv0, dstpath, strerror(errno));
@@ -624,7 +851,7 @@ node_update(NODE *src_nip,
 #endif
 #ifdef ACL_TYPE_ACCESS
     if (src_nip->a.acc) {
-      if (!dst_nip->a.acc || acl_compare(src_nip->a.acc, dst_nip->a.acc) != 0) {
+      if (!dst_nip || !dst_nip->a.acc || acl_compare(src_nip->a.acc, dst_nip->a.acc) != 0) {
 	if (acl_set_link_np(dstpath, ACL_TYPE_ACCESS, src_nip->a.acc) < 0) {
 	  fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_ACCESS): %s\n",
 		  argv0, dstpath, strerror(errno));
@@ -637,7 +864,7 @@ node_update(NODE *src_nip,
 #endif
 #ifdef ACL_TYPE_DEFAULT
     if (src_nip->a.def) {
-      if (!dst_nip->a.def || acl_compare(src_nip->a.def, dst_nip->a.def) != 0) {
+      if (!dst_nip || !dst_nip->a.def || acl_compare(src_nip->a.def, dst_nip->a.def) != 0) {
 	if (acl_set_link_np(dstpath, ACL_TYPE_DEFAULT, src_nip->a.def) < 0) {
 	  fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_DEFAULT): %s\n",
 		  argv0, dstpath, strerror(errno));
@@ -651,10 +878,10 @@ node_update(NODE *src_nip,
   }
   
   if (f_times > 1) {
-    if (!dst_nip
 #if defined(__FreeBSD__)
-	|| timespec_compare(&src_nip->s.st_mtim, &dst_nip->s.st_mtim) 
-	|| timespec_compare(&src_nip->s.st_atim, &dst_nip->s.st_atim)) {
+    if (!dst_nip ||
+	timespec_compare(&src_nip->s.st_mtim, &dst_nip->s.st_mtim) ||
+	timespec_compare(&src_nip->s.st_atim, &dst_nip->s.st_atim)) {
       struct timespec times[2];
 
       times[0] = src_nip->s.st_atim;
@@ -664,9 +891,13 @@ node_update(NODE *src_nip,
       if (rc < 0) {
 	fprintf(stderr, "%s: Error: utimensat(%s): %s\n",
 		argv0, dstpath, strerror(errno));
+	return f_ignore ? 0 : rc;
+      }
+    }
 #elif defined(__APPLE__)
-	|| timespec_compare(&src_nip->s.st_mtimespec, &dst_nip->s.st_mtimespec) 
-        || timespec_compare(&src_nip->s.st_atimespec, &dst_nip->s.st_atimespec)) {
+    if (!dst_nip ||
+	timespec_compare(&src_nip->s.st_mtimespec, &dst_nip->s.st_mtimespec) ||
+        timespec_compare(&src_nip->s.st_atimespec, &dst_nip->s.st_atimespec)) {
       struct timespec times[2];
       
       times[0] = src_nip->s.st_atimespec;
@@ -676,9 +907,13 @@ node_update(NODE *src_nip,
       if (rc < 0) {
 	fprintf(stderr, "%s: Error: utimensat(%s): %s\n",
 		argv0, dstpath, strerror(errno));
+	return f_ignore ? 0 : rc;
+      }
+    }
 #else
-	|| difftime(src_nip->s.st_mtime, dst_nip->s.st_mtime)
-        || difftime(src_nip->s.st_mtime, dst_nip->s.st_mtime)) {
+    if (!dst_nip ||
+	difftime(src_nip->s.st_mtime, dst_nip->s.st_mtime) ||
+        difftime(src_nip->s.st_mtime, dst_nip->s.st_mtime)) {
       struct timeval times[2];
       
       times[0].tv_sec = src_nip->s.st_atime;
@@ -691,10 +926,10 @@ node_update(NODE *src_nip,
       if (rc < 0) {
 	fprintf(stderr, "%s: Error: utimens(%s): %s\n",
 		argv0, dstpath, strerror(errno));
-#endif
 	return f_ignore ? 0 : rc;
       }
     }
+#endif
   }
   
 #ifdef UF_ARCHIVE
@@ -768,7 +1003,7 @@ attrs_get(const char *objpath,
   
   while (ap < end) {
     char *an;
-    ATTRINFO *ad;
+    ATTR *ad;
     ssize_t adsize;
 
 #ifdef __FreeBSD__
@@ -800,10 +1035,10 @@ attrs_get(const char *objpath,
       exit(1);
     }
     
-    ad = malloc(sizeof(ATTRINFO) + adsize);
+    ad = malloc(sizeof(ATTR) + adsize);
     if (!ad) {
       fprintf(stderr, "%s: Error: %s: malloc(%ld): %s\n",
-	      argv0, objpath, sizeof(ATTRINFO)+adsize, strerror(errno));
+	      argv0, objpath, sizeof(ATTR)+adsize, strerror(errno));
       exit(1);
     }
 
@@ -1224,7 +1459,7 @@ print_hex(const unsigned char *buf,
 int attr_print(const char *key,
 	       void *val,
 	       void *extra) {
-  ATTRINFO *aip = (ATTRINFO *) val;
+  ATTR *aip = (ATTR *) val;
 
   printf("      %s = ", key);
   if (is_printable(aip->buf, aip->len))
@@ -1286,13 +1521,15 @@ int node_print(const char *key,
   
   if (verbose > 1) {
     if (verbose > 2) {
+      char tmpbuf[80];
+      
       puts("    General:");
-      printf("      Size  = %ld\n", nip->s.st_size);
+      printf("      Size  = %s\n", size2str(nip->s.st_size, tmpbuf, sizeof(tmpbuf), 0));
       printf("      Uid   = %d\n", nip->s.st_uid);
       printf("      Gid   = %d\n", nip->s.st_gid);
-      printf("      Atime = %ld\n", nip->s.st_atime);
-      printf("      Ctime = %ld\n", nip->s.st_ctime);
-      printf("      Mtime = %ld\n", nip->s.st_mtime);
+      printf("      Atime = %s\n", time2str(nip->s.st_atime, tmpbuf, sizeof(tmpbuf), 1));
+      printf("      Ctime = %s\n", time2str(nip->s.st_ctime, tmpbuf, sizeof(tmpbuf), 1));
+      printf("      Mtime = %s\n", time2str(nip->s.st_mtime, tmpbuf, sizeof(tmpbuf), 1));
     }
     
 #ifdef ACL_TYPE_NFS4
@@ -1394,10 +1631,10 @@ int
 attr_compare_handler(const char *key,
 		     void *vp,
 		     void *xp) {
-  ATTRINFO *aip = (ATTRINFO *) vp;
-  ATTRINFO *bip = NULL;
+  ATTR *aip = (ATTR *) vp;
+  ATTR *bip = NULL;
   BTREE *btp = (BTREE *) xp;
-
+  
   
   btree_search(btp, key, (void **) &bip);
   if (!bip)
@@ -2137,123 +2374,7 @@ dir_compare(const char *srcpath,
 }
 
 
-int
-str2size(const char **str,
-	 size_t *vp) {
-  size_t base = 1000, vbm, sbm, v, sv;
-  int rc = 0, rv = 0, sign = 1;
-  char c, i;
-
-  
-  *vp = 0;
-
-  if (**str == '-' && isdigit((*str)[1])) {
-    ++*str;
-    sign = -1;
-  }
-  
-  while (**str && isdigit(**str)) {
-    c = i = 0;
-
-    if ((*str)[0] == '0' && (*str)[1] == 'x') {
-      ++*str;
-      ++*str;
-      
-      rc = sscanf(*str, "%lx%c%c", &v, &c, &i);
-      if (rc < 1)
-	return -1;
-      
-      while (**str && isxdigit(**str))
-	++*str;
-      
-      rv = 1;
-    } else {
-      rc = sscanf(*str, "%ld%c%c", &v, &c, &i);
-      if (rc < 1)
-	return -1;
-      
-      while (**str && isdigit(**str))
-	++*str;
-      
-      rv = 1;
-    }
-
-    if (c) {
-      if (i == 'i') {
-	++*str;
-	base = 1024;
-      }
-    }
-
-    switch (toupper(c)) {
-    case 'K':
-      vbm = base;
-      sbm = 1;
-      break;
-      
-    case 'M':
-      vbm = base*base;
-      sbm = base;
-      break;
-      
-    case 'G':
-      vbm = base*base*base;
-      sbm = base*base;
-      break;
-      
-    case 'T':
-      vbm = base*base*base*base;
-      sbm = base*base*base;
-      break;
-      
-    case 'P':
-      vbm = base*base*base*base;
-      sbm = base*base*base;
-      break;
-      
-    default:
-      c = 0;
-      vbm = 1;
-      sbm = 1;
-      break;
-    }
-
-    v *= vbm;
-    
-    if (c) {
-      int nd = 0;
-      ++*str;
-      sv = 0;
-      while (isdigit(**str)) {
-	sv *= 10;
-	sv += **str - '0';
-	++nd;
-	++*str;
-      }
-      switch (nd) {
-      case 1:
-	sv *= 100;
-	break;
-      case 2:
-	sv *= 10;
-	break;
-      }
-		     
-      v += sv*sbm;
-    }
-    
-    *vp += v;
-    
-    if (**str == '+')
-      ++*str;
-    else
-      break;
-  }
-
-  *vp *= sign;
-  return rv;
-}
-
+ 
 #define OPT_NONE 0
 #define OPT_INT  1
 #define OPT_STR  2
@@ -2481,13 +2602,15 @@ main(int argc,
 		 opts[k].a ? opts[k].a : "",
 		 opts[k].h);
 	  if (opts[k].v) {
+	    char tmpbuf[80];
+	    
 	    putchar(' ');
 	    switch (opts[k].f) {
 	    case OPT_INT:
 	      printf("[%d]", * (int *) opts[k].v);
 	      break;
 	    case OPT_SIZE:
-	      printf("[%ld]", * (size_t *) opts[k].v);
+	      printf("[%s]", size2str(* (size_t *) opts[k].v, tmpbuf, sizeof(tmpbuf), 0));
 	      break;
 	    case OPT_STR:
 	      printf("[%s]", * (char **) opts[k].v);

@@ -1,7 +1,7 @@
 /*
-** digest.h - Digest/Checksum functions
+** digest.c - Digest/Checksum functions
 **
-** Copyright (c) 2020, Peter Eriksson <pen@lysator.liu.se>
+** Copyright (c) 2020-2021, Peter Eriksson <pen@lysator.liu.se>
 ** All rights reserved.
 ** 
 ** Redistribution and use in source and binary forms, with or without
@@ -70,7 +70,6 @@ digest_str2type(const char *s) {
     return DIGEST_TYPE_SHA512;
 #endif
 
-
   return -1;
 }
 
@@ -109,7 +108,6 @@ digest_type2str(DIGEST_TYPE type) {
   case DIGEST_TYPE_SHA512:
     return "SHA512";
 #endif
-
 
   default:
     return NULL;
@@ -248,11 +246,17 @@ digest_final(DIGEST *dp,
 
   
   switch (dp->state) {
+  case DIGEST_STATE_NONE:
+  case DIGEST_STATE_FINAL:
+    errno = EINVAL;
+    return -1;
+    
   case DIGEST_STATE_INIT:
   case DIGEST_STATE_UPDATE:
     
     switch (dp->type) {
     case DIGEST_TYPE_INVALID:
+      errno = EINVAL;
       return -1;
       
     case DIGEST_TYPE_NONE:
