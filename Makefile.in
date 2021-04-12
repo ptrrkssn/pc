@@ -1,12 +1,26 @@
-# Makefile
+# Makefile.in for pc
 
-CC=gcc
-CFLAGS=-O -g -Wall
+# Some 'make' variants does not include CPPFLAGS when compiling, some do
+.c.o:
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
-OBJS=pc.o btree.o digest.o
+srcdir = @srcdir@
+VPATH = @srcdir@
+
+PREFIX = @prefix@
+
+CC       = @CC@
+INSTALL  = @INSTALL@
+
+CPPFLAGS = @CPPFLAGS@
+CFLAGS   = @CFLAGS@
+LDFLAGS  = @LDFLAGS@
+LIBS     = @LIBS@
+
+OBJS = pc.o btree.o digest.o
 
 pc: $(OBJS)
-	$(CC) -o pc $(OBJS) -lmd -lz
+	$(CC) -o pc $(OBJS) $(LIBS)
 
 digest.o: digest.c digest.h
 btree.o: btree.c btree.h
@@ -15,7 +29,10 @@ pc.o: pc.c digest.h btree.h
 clean:
 	-rm -fr *.o pc \#* *~ core t
 
-push:	clean
+distclean: clean
+	-rm -fr config.log config.status Makefile config.h autom4te.cache
+
+push:	distclean
 	git add -A && git commit -a && git push
 
 tests:	test-setup test-1 # test-2 test-3 test-4 test-5

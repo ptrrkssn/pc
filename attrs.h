@@ -34,16 +34,13 @@
 #ifndef ATTRS_H
 #define ATTRS_H 1
 
-#if defined(__FreeBSD__)
+#if HAVE_SYS_EXTATTR_H
 #include <sys/extattr.h>
 #endif
 
-#if defined(__APPLE__)
+#if HAVE_SYS_XATTR_H
 #include <sys/xattr.h>
-#endif
 
-
-#if defined(__APPLE__)
 #define EXTATTR_NAMESPACE_SYSTEM 0
 #define extattr_get_fd(fd, ns, name, data, size)     fgetxattr(fd, name, data, size, 0, 0)
 #define extattr_get_file(path, ns, name, data, size) getxattr(path, name, data, size, 0, 0)
@@ -63,4 +60,6 @@
 #define extattr_list_link(fd, ns, buf, size)	     listxattr(fd, (char *) buf, size, XATTR_NOFOLLOW)
 
 #endif
+
+
 #endif

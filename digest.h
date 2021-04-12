@@ -33,25 +33,37 @@
 #ifndef DIGEST_H
 #define DIGEST_H 1
 
+#include "config.h"
+
 #include <sys/types.h>
 
+#if HAVE_ZLIB_H
 #include <zlib.h>
 #define HAVE_ADLER32 1
 #define HAVE_CRC32   1
+#endif
 
-#ifdef __FreeBSD__
+#if HAVE_MD5_H
 #include <md5.h>
 #define HAVE_MD5 1
+#endif
 
+#if HAVE_SKEIN_H
 #include <skein.h>
 #define HAVE_SKEIN256 1
+#endif
 
+#if HAVE_SHA256_H
 #include <sha256.h>
 #define HAVE_SHA256 1
+#endif
 
+#if HAVE_SHA384_H
 #include <sha384.h>
 #define HAVE_SHA384 1
+#endif
 
+#if HAVE_SHA512_H
 #include <sha512.h>
 #define HAVE_SHA512 1
 #endif
@@ -60,36 +72,16 @@
 typedef enum {
 	      DIGEST_TYPE_INVALID  = -1,
 	      DIGEST_TYPE_NONE     = 0,
-#if HAVE_ADLER32
 	      DIGEST_TYPE_ADLER32  = 1,
-#endif
-#if HAVE_CRC32
 	      DIGEST_TYPE_CRC32    = 2,
-#endif
-#if HAVE_MD5
 	      DIGEST_TYPE_MD5      = 3,
-#endif
-#if HAVE_SKEIN256
 	      DIGEST_TYPE_SKEIN256 = 4,
-#endif
-#if HAVE_SHA256
 	      DIGEST_TYPE_SHA256   = 5,
-#endif
-#if HAVE_SHA384
 	      DIGEST_TYPE_SHA384   = 6,
-#endif
-#if HAVE_SHA512
 	      DIGEST_TYPE_SHA512   = 7,
-#endif
 } DIGEST_TYPE;
 
-#if defined(DIGEST_TYPE_SHA512)
 #define DIGEST_TYPE_BEST DIGEST_TYPE_SHA512
-#elif defined(DIGEST_TYPE_CRC32)
-#define DIGEST_TYPE_BEST DIGEST_TYPE_CRC32
-#else
-#define DIGEST_TYPE_BEST DIGEST_TYPE_NONE
-#endif
 
 typedef enum {
 	      DIGEST_STATE_NONE    = 0,

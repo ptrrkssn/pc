@@ -31,8 +31,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define USE_AIO      0
-#define USE_SENDFILE 0
+#include "config.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,17 +43,21 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <time.h>
-#if USE_AIO
+
+#if HAVE_AIO_H
 #include <aio.h>
 #endif
 
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/acl.h>
 #include <sys/param.h>
 #include <sys/vnode.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+
+#if HAVE_SYS_ACL_H
+#include <sys/acl.h>
+#endif
 
 #include "btree.h"
 #include "digest.h"
@@ -131,8 +134,10 @@ typedef struct attrupdate {
 
 
 
-char *argv0 = "pc";
-char *version = "0.3";
+char *argv0 = PACKAGE_NAME;
+char *version = PACKAGE_VERSION;
+char *bugreport = PACKAGE_BUGREPORT;
+char *url = PACKAGE_URL;
 
 int f_verbose = 0;
 int f_debug   = 0;
@@ -628,19 +633,6 @@ file_copy(const char *srcpath,
   }
   if (rc < 0) {
     fprintf(stderr, "%s: Error: %s: aio_waitcomplete: %s\n", srcpath, strerror(errno));
-    rc = -1;
-    goto End;
-  }
-#elif USE_SENDFILE
-  while ((rc = sendfile(src_fd, dst_fd, tbytes, SENDFILE_BUFSIZE, NULL, &sbytes, SF_NOCACHE)) > 0 ||
-	 errno == EAGAIN) {
-    tbytes += sbytes;
-    if (f_verbose > 1)
-      printf("  %ld bytes copied\r", tbytes);
-    sbytes = 0;
-  }
-  if (rc < 0) {
-    fprintf(stderr, "%s: Error: %s -> %s: sendfile: %s\n", srcpath, dstpath, strerror(errno));
     rc = -1;
     goto End;
   }
@@ -2447,7 +2439,7 @@ get_option(const char *s,
 int
 main(int argc,
      char *argv[]) {
-  int i, j, k, rc;
+  int i, j, k, n, rc;
   char *ds;
   const char *bs;
   DIRNODE *src;
@@ -2621,8 +2613,12 @@ main(int argc,
 	  putchar('\n');
 	}
 	printf("\nDigests:\n  ");
-	for (k = DIGEST_TYPE_NONE; k <= DIGEST_TYPE_BEST; k++)
-	  printf("%s%s", (k != DIGEST_TYPE_NONE ? ", " : ""), digest_type2str(k));
+	n = 0;
+	for (k = DIGEST_TYPE_NONE; k <= DIGEST_TYPE_BEST; k++) {
+	  const char *s = digest_type2str(k);
+	  if (s)
+	    printf("%s%s", n++ ? ", " : "", s);
+	}
 	putchar('\n');
 	puts("\nUsage:");
 	puts("  Options may be specified multiple times (-vv), or values may be specified");
@@ -2646,6 +2642,9 @@ main(int argc,
  EndArg:
   argv0 = argv[0];
 
+  if (f_verbose)
+    printf("[%s, v%s - Peter Eriksson <pen@lysator.liu.se> (%s)]\n", PACKAGE_NAME, version, url);
+  
   if (i+2 > argc) {
     fprintf(stderr, "%s: Error: Missing required arguments: <src-1> [.. <src-N>] <dst>\n",
 	    argv0);

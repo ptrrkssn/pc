@@ -136,6 +136,7 @@ bnode_min(BNODE *n) {
   return n;
 }
 
+#if 0 /* Not used currently */
 
 /* Locate the right-most (last) node of a tree */
 static inline BNODE *
@@ -148,8 +149,6 @@ bnode_max(BNODE *n) {
   return n;
 }
 
-
-#if 0
 /* Locate the previous node of a tree */
 static inline BNODE *
 bnode_prev(BNODE *n) {
