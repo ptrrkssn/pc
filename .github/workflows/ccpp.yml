@@ -13,7 +13,7 @@ jobs:
     - name: dependencies
       run: test "`uname -s`" = "Linux" -a -f /usr/bin/apt && sudo apt install libmd-dev || true
     - name: configure
-      run: ./configure
+      run: autoconf && ./configure
     - name: make
       run: make
     - name: tests
