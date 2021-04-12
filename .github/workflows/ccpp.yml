@@ -10,6 +10,8 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     steps:
     - uses: actions/checkout@v2
+    - name: dependencies
+      run: test "`uname -s`" = "Linux" -a -f /usr/bin/apt && sudo apt install libmd-dev || true
     - name: configure
       run: ./configure
     - name: make
