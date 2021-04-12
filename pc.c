@@ -51,9 +51,12 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/param.h>
-#include <sys/vnode.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+
+#if HAVE_SYS_VNODE_H
+#include <sys/vnode.h>
+#endif
 
 #if HAVE_SYS_ACL_H
 #include <sys/acl.h>

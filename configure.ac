@@ -14,7 +14,7 @@ AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 
 # Checks for header files.
-AC_CHECK_HEADERS([sys/extattr.h sys/xattr.h sys/acl.h aio.h zlib.h md5.h skein.h sha256.h sha384.h sha512.h])
+AC_CHECK_HEADERS([sys/vnode.h sys/extattr.h sys/xattr.h sys/acl.h aio.h zlib.h md5.h skein.h sha256.h sha384.h sha512.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_UID_T
