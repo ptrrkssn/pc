@@ -6,3 +6,4 @@
 * Add support for OmniOS
 * Add a remote mode
 * Expand the test suite
+* Support io_uring
