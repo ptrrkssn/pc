@@ -68,7 +68,7 @@
 
 
 #if defined(HAVE_LCHFLAGS) && !defined(UF_ARCHIVE)
-#defione UF_ARCHIVE 0
+#define UF_ARCHIVE 0
 #endif
 
 /* 
@@ -1047,7 +1047,8 @@ node_update(NODE *src_nip,
     }
     
     if (f_flags > 1 && (src_nip->s.st_flags & UF_ARCHIVE)) {
-      xrc = lchflags(src_nip->p, src_nip->s.st_flags & ~UF_ARCHIVE);
+      xrc = lchflags(src_nip->p,
+                     (src_nip->s.st_flags & ~UF_ARCHIVE));
       if (xrc < 0) {
 	fprintf(stderr, "%s: Error: %s: lchflags: %s\n",
 		argv0, src_nip->p, strerror(errno));
