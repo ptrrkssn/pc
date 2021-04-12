@@ -67,6 +67,9 @@
 #include "attrs.h"
 
 
+#if defined(HAVE_LCHFLAGS) && !defined(UF_ARCHIVE)
+#defione UF_ARCHIVE 0
+#endif
 
 /* 
  * Node information
