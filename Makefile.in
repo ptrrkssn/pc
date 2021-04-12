@@ -39,7 +39,7 @@ clean:
 	-rm -fr *.o pc \#* *~ core t
 
 distclean: clean
-	-rm -fr configure config.log config.status Makefile config.h autom4te.cache
+	-rm -fr config.log config.status Makefile config.h autom4te.cache
 
 
 push:	distclean

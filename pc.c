@@ -793,15 +793,23 @@ node_update(NODE *src_nip,
     /* Must be done after lchown() in case it clears setuid/setgid bits */
     if (!dst_nip ||
         src_nip->s.st_mode != dst_nip->s.st_mode) {
+      if (S_ISLNK(src_nip->s.st_mode)) {
 #if HAVE_LCHMOD
-      xrc = lchmod(dstpath, src_nip->s.st_mode);
+        xrc = lchmod(dstpath, src_nip->s.st_mode);
+        if (xrc < 0)
+          fprintf(stderr, "%s: Error: %s: lchmod: %s\n",
+                  argv0, dstpath, strerror(errno));
 #else
-      xrc = -1;
-      errno = ENOSYS;
+        xrc = -1;
+        errno = ENOSYS;
+      } else {
+        xrc = chmod(dstpath, src_nip->s.st_mode);
+        if (xrc < 0)
+          fprintf(stderr, "%s: Error: %s: chmod: %s\n",
+                  argv0, dstpath, strerror(errno));
+      }
 #endif
       if (xrc < 0) {
-	fprintf(stderr, "%s: Error: %s: lchmod: %s\n",
-		argv0, dstpath, strerror(errno));
         if (!f_ignore)
           return xrc;
         rc = xrc;
