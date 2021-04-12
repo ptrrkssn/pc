@@ -331,7 +331,10 @@ digest_final(DIGEST *dp,
       SHA512_Final(buf, &dp->ctx.sha512);
       rlen = DIGEST_BUFSIZE_SHA512;
       break;
-#endif      
+#endif
+    default:
+      errno = EINVAL;
+      return -1;
     }
     break;
     
