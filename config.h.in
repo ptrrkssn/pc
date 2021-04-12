@@ -6,6 +6,12 @@
 /* Define to 1 if you have the `acl_get_file' function. */
 #undef HAVE_ACL_GET_FILE
 
+/* Define to 1 if you have the `acl_get_link_np' function. */
+#undef HAVE_ACL_GET_LINK_NP
+
+/* Define to 1 if you have the `acl_set_link_np' function. */
+#undef HAVE_ACL_SET_LINK_NP
+
 /* Define to 1 if you have the <aio.h> header file. */
 #undef HAVE_AIO_H
 
@@ -20,6 +26,12 @@
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
+
+/* Define to 1 if you have the `lchmod' function. */
+#undef HAVE_LCHMOD
+
+/* Define to 1 if you have the `lutimes' function. */
+#undef HAVE_LUTIMES
 
 /* Define to 1 if your system has a GNU libc compatible `malloc' function, and
    to 0 otherwise. */
@@ -79,6 +91,9 @@
 
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
+
+/* Define to 1 if you have the `utimensat' function. */
+#undef HAVE_UTIMENSAT
 
 /* Define to 1 if you have the <zlib.h> header file. */
 #undef HAVE_ZLIB_H

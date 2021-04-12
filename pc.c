@@ -769,52 +769,70 @@ int
 node_update(NODE *src_nip,
 	    NODE *dst_nip,
 	    const char *dstpath) {
-  int rc = 0;
+  int rc = 0, xrc;
 
-  
+
   if (f_owner) {
     if (!dst_nip ||
-	src_nip->s.st_uid != dst_nip->s.st_uid ||
+        src_nip->s.st_uid != dst_nip->s.st_uid ||
 	src_nip->s.st_gid != dst_nip->s.st_gid) {
       if (src_nip->s.st_uid == getuid() || geteuid() == 0) {
-	if (lchown(dstpath, src_nip->s.st_uid, src_nip->s.st_gid) < 0 && errno != EPERM) {
+	xrc = lchown(dstpath, src_nip->s.st_uid, src_nip->s.st_gid);
+        if (xrc < 0 && errno != EPERM) {
 	  fprintf(stderr, "%s: Error: %s: lchown: %s\n",
 		  argv0, dstpath, strerror(errno));
-	  rc = -1;
-	  if (!f_ignore)
-	    return rc;
+          if (!f_ignore)
+            return xrc;
+          rc = xrc;
 	}
       }
     }
   }
-
+  
   if (f_perms) {
     /* Must be done after lchown() in case it clears setuid/setgid bits */
-    if (!dst_nip || src_nip->s.st_mode != dst_nip->s.st_mode) {
-      if (lchmod(dstpath, src_nip->s.st_mode) < 0) {
+    if (!dst_nip ||
+        src_nip->s.st_mode != dst_nip->s.st_mode) {
+#if HAVE_LCHMOD
+      xrc = lchmod(dstpath, src_nip->s.st_mode);
+#else
+      xrc = -1;
+      errno = ENOSYS;
+#endif
+      if (xrc < 0) {
 	fprintf(stderr, "%s: Error: %s: lchmod: %s\n",
 		argv0, dstpath, strerror(errno));
-	rc = -1;
-	if (!f_ignore)
-	  return rc;
+        if (!f_ignore)
+          return xrc;
+        rc = xrc;
       }
     }
   }
-
+  
   if (f_attrs) {
     ATTRUPDATE aub;
-
+    
     aub.fd = -1;
     aub.pn = dstpath;
-
+    
 #ifdef EXTATTR_NAMESPACE_SYSTEM
     if (src_nip->x.sys) {
       aub.ns = EXTATTR_NAMESPACE_SYSTEM;
       aub.attrs = dst_nip ? dst_nip->x.sys : NULL;
-      btree_foreach(src_nip->x.sys, attr_update, &aub);
+      xrc = btree_foreach(src_nip->x.sys, attr_update, &aub);
+      if (xrc < 0) {
+        if (!f_ignore)
+          return xrc;
+        rc = xrc;
+      }
       if (f_remove && dst_nip && dst_nip->x.sys) {
 	aub.attrs = src_nip->x.sys;
-	btree_foreach(dst_nip->x.sys, attr_remove, &aub);
+	xrc = btree_foreach(dst_nip->x.sys, attr_remove, &aub);
+        if (xrc < 0) {
+          if (!f_ignore)
+            return xrc;
+          rc = xrc;
+        }
       }
     }
 #endif
@@ -822,10 +840,20 @@ node_update(NODE *src_nip,
     if (src_nip->x.usr) {
       aub.ns = EXTATTR_NAMESPACE_USER;
       aub.attrs = dst_nip ? dst_nip->x.usr : NULL;
-      btree_foreach(src_nip->x.usr, attr_update, &aub);
+      xrc = btree_foreach(src_nip->x.usr, attr_update, &aub);
+      if (xrc < 0) {
+        if (!f_ignore)
+          return xrc;
+        rc = xrc;
+      }
       if (f_remove && dst_nip && dst_nip->x.usr) {
 	aub.attrs = src_nip->x.usr;
-	btree_foreach(dst_nip->x.usr, attr_remove, &aub);
+	xrc = btree_foreach(dst_nip->x.usr, attr_remove, &aub);
+        if (xrc < 0) {
+          if (!f_ignore)
+            return xrc;
+          rc = xrc;
+        }
       }
     }
 #endif
@@ -834,39 +862,100 @@ node_update(NODE *src_nip,
   if (f_acls) {
 #ifdef ACL_TYPE_NFS4
     if (src_nip->a.nfs) {
-      if (!dst_nip || !dst_nip->a.nfs || acl_compare(src_nip->a.nfs, dst_nip->a.nfs) != 0) {
-	if (acl_set_link_np(dstpath, ACL_TYPE_NFS4, src_nip->a.nfs) < 0) {
-	  fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_NFS4): %s\n",
-		  argv0, dstpath, strerror(errno));
-	  rc = -1;
-	  if (!f_ignore)
-	    return rc;
-	}
+      if (!dst_nip ||
+          !dst_nip->a.nfs ||
+          acl_compare(src_nip->a.nfs, dst_nip->a.nfs) != 0) {
+        if (S_ISLNK(src_nip->s.st_mode)) {
+#if HAVE_ACL_SET_LINK_NP
+          xrc = acl_set_link_np(dstpath, ACL_TYPE_NFS4, src_nip->a.nfs);
+          if (xrc < 0)
+            fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_NFS4): %s\n",
+                    argv0, dstpath, strerror(errno));
+#else
+          errno = ENOSYS;
+          xrc = -1;
+#endif
+          if (xrc < 0) {
+            if (!f_ignore)
+              return xrc;
+            rc = xrc;
+          }
+        }
+      } else {
+          xrc = acl_set_file(dstpath, ACL_TYPE_NFS4, src_nip->a.nfs);
+          if (xrc < 0) {
+            fprintf(stderr, "%s: Error: %s: acl_set_file(ACL_TYPE_NFS4): %s\n",
+                    argv0, dstpath, strerror(errno));
+            if (!f_ignore)
+              return xrc;
+            rc = xrc;
+          }
+        }
       }
     }
 #endif
 #ifdef ACL_TYPE_ACCESS
     if (src_nip->a.acc) {
-      if (!dst_nip || !dst_nip->a.acc || acl_compare(src_nip->a.acc, dst_nip->a.acc) != 0) {
-	if (acl_set_link_np(dstpath, ACL_TYPE_ACCESS, src_nip->a.acc) < 0) {
-	  fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_ACCESS): %s\n",
-		  argv0, dstpath, strerror(errno));
-	  rc = -1;
-	  if (!f_ignore)
-	    return rc;
+      if (!dst_nip ||
+          !dst_nip->a.acc ||
+          acl_compare(src_nip->a.acc, dst_nip->a.acc) != 0) {
+        if (S_ISLNK(src_nip->s.st_mode)) {
+#if HAVE_ACL_SET_LINK_NP
+          xrc = acl_set_link_np(dstpath, ACL_TYPE_ACCESS, src_nip->a.nfs);
+          if (xrc < 0)
+            fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_ACCESS): %s\n",
+                    argv0, dstpath, strerror(errno));
+#else
+          errno = ENOSYS;
+          xrc = -1;
+#endif
+          if (xrc < 0) {
+            if (!f_ignore)
+              return xrc;
+            rc = xrc;
+          }
+	} else {
+          xrc = acl_set_file(dstpath, ACL_TYPE_ACCESS, src_nip->a.acc);
+          if (xrc < 0) {
+            fprintf(stderr, "%s: Error: %s: acl_set_file(ACL_TYPE_ACCESS): %s\n",
+                    argv0, dstpath, strerror(errno));
+            if (!f_ignore)
+              return xrc;
+            rc = xrc;
+          }
 	}
       }
     }
 #endif
 #ifdef ACL_TYPE_DEFAULT
     if (src_nip->a.def) {
-      if (!dst_nip || !dst_nip->a.def || acl_compare(src_nip->a.def, dst_nip->a.def) != 0) {
-	if (acl_set_link_np(dstpath, ACL_TYPE_DEFAULT, src_nip->a.def) < 0) {
-	  fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_DEFAULT): %s\n",
-		  argv0, dstpath, strerror(errno));
-	  rc = -1;
-	  if (!f_ignore)
-	    return rc;
+      if (!dst_nip ||
+          !dst_nip->a.def ||
+          acl_compare(src_nip->a.def, dst_nip->a.def) != 0) {
+        if (S_ISLNK(src_nip->s.st_mode)) {
+#if HAVE_ACL_SET_LINK_NP
+          xrc = acl_set_link_np(dstpath, ACL_TYPE_DEFAULT, src_nip->a.nfs);
+          if (xrc < 0)
+            fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_DEFAULT): %s\n",
+                    argv0, dstpath, strerror(errno));
+#else
+          errno = ENOSYS;
+          xrc = -1;
+#endif
+          if (xrc < 0) {
+            if (!f_ignore)
+              return xrc;
+            rc = xrc;
+          }
+	} else {
+          xrc = acl_set_file(dstpath, ACL_TYPE_DEFAULT, src_nip->a.def);
+          if (xrc < 0) {
+            fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_DEFAULT): %s\n",
+                    argv0, dstpath, strerror(errno));
+            if (!f_ignore)
+              return xrc;
+            rc = xrc;
+          }
 	}
       }
     }
@@ -874,55 +963,59 @@ node_update(NODE *src_nip,
   }
   
   if (f_times > 1) {
-#if defined(__FreeBSD__)
+#if HAVE_UTIMENSAT
     if (!dst_nip ||
-	timespec_compare(&src_nip->s.st_mtim, &dst_nip->s.st_mtim) ||
-	timespec_compare(&src_nip->s.st_atim, &dst_nip->s.st_atim)) {
-      struct timespec times[2];
-
-      times[0] = src_nip->s.st_atim;
-      times[1] = src_nip->s.st_mtim;
-      
-      rc = utimensat(AT_FDCWD, dstpath, times, AT_SYMLINK_NOFOLLOW);
-      if (rc < 0) {
-	fprintf(stderr, "%s: Error: utimensat(%s): %s\n",
-		argv0, dstpath, strerror(errno));
-	return f_ignore ? 0 : rc;
-      }
-    }
-#elif defined(__APPLE__)
-    if (!dst_nip ||
-	timespec_compare(&src_nip->s.st_mtimespec, &dst_nip->s.st_mtimespec) ||
-        timespec_compare(&src_nip->s.st_atimespec, &dst_nip->s.st_atimespec)) {
+#ifdef __APPLE__
+        timespec_compare(&src_nip->s.st_mtimespec, &dst_nip->s.st_mtimespec) ||
+        timespec_compare(&src_nip->s.st_atimespec, &dst_nip->s.st_atimespec)
+#else
+        timespec_compare(&src_nip->s.st_mtim, &dst_nip->s.st_mtim) ||
+	timespec_compare(&src_nip->s.st_atim, &dst_nip->s.st_atim)
+#endif
+        ) {
       struct timespec times[2];
       
+#ifdef __APPLE__
       times[0] = src_nip->s.st_atimespec;
       times[1] = src_nip->s.st_mtimespec;
+#else
+      times[0] = src_nip->s.st_atim;
+      times[1] = src_nip->s.st_mtim;
+#endif
       
-      rc = utimensat(AT_FDCWD, dstpath, times, AT_SYMLINK_NOFOLLOW);
-      if (rc < 0) {
+      xrc = utimensat(AT_FDCWD, dstpath, times, AT_SYMLINK_NOFOLLOW);
+      if (xrc < 0) {
 	fprintf(stderr, "%s: Error: utimensat(%s): %s\n",
 		argv0, dstpath, strerror(errno));
-	return f_ignore ? 0 : rc;
+        if (!f_ignore)
+          return xrc;
+        rc = xrc;
       }
     }
 #else
     if (!dst_nip ||
-	difftime(src_nip->s.st_mtime, dst_nip->s.st_mtime) ||
+        difftime(src_nip->s.st_mtime, dst_nip->s.st_mtime) ||
         difftime(src_nip->s.st_mtime, dst_nip->s.st_mtime)) {
       struct timeval times[2];
       
       times[0].tv_sec = src_nip->s.st_atime;
       times[1].tv_sec = src_nip->s.st_mtime;
 
-      if (S_ISLNK(dst_nip->s.st_flags))
-	rc = lutimes(dstpath, times);
-      else
-	rc = utimes(dstpath, times);
-      if (rc < 0) {
-	fprintf(stderr, "%s: Error: utimens(%s): %s\n",
-		argv0, dstpath, strerror(errno));
-	return f_ignore ? 0 : rc;
+      if (S_ISLNK(dst_nip->s.st_mode)) {
+	xrc = lutimes(dstpath, times);
+        if (xrc < 0)
+          fprintf(stderr, "%s: Error: lutimens(%s): %s\n",
+                  argv0, dstpath, strerror(errno));
+      } else {
+	xrc = utimes(dstpath, times);
+        if (xrc < 0)
+          fprintf(stderr, "%s: Error: utimens(%s): %s\n",
+                  argv0, dstpath, strerror(errno));
+      }
+      if (xrc < 0) {
+        if (!f_ignore)
+          return xrc;
+        rc = xrc;
       }
     }
 #endif
@@ -930,21 +1023,26 @@ node_update(NODE *src_nip,
   
 #ifdef UF_ARCHIVE
   if (f_flags) {
-    if (!dst_nip || (src_nip->s.st_flags & ~UF_ARCHIVE) != (dst_nip->s.st_flags & ~UF_ARCHIVE)) {
-      rc = lchflags(dstpath, src_nip->s.st_flags);
-      if (rc < 0) {
+    if (!dst_nip ||
+        (src_nip->s.st_flags & ~UF_ARCHIVE) != (dst_nip->s.st_flags & ~UF_ARCHIVE)) {
+      xrc = lchflags(dstpath, src_nip->s.st_flags);
+      if (xrc < 0) {
 	fprintf(stderr, "%s: Error: %s: lchflags: %s\n",
 		argv0, dstpath, strerror(errno));
-	return f_ignore ? 0 : rc;
+        if (!f_ignore)
+          return xrc;
+        rc = xrc;
       }
     }
     
     if (f_flags > 1 && (src_nip->s.st_flags & UF_ARCHIVE)) {
-      rc = lchflags(src_nip->p, src_nip->s.st_flags & ~UF_ARCHIVE);
-      if (rc < 0) {
+      xrc = lchflags(src_nip->p, src_nip->s.st_flags & ~UF_ARCHIVE);
+      if (xrc < 0) {
 	fprintf(stderr, "%s: Error: %s: lchflags: %s\n",
 		argv0, src_nip->p, strerror(errno));
-	return f_ignore ? 0 : rc;
+        if (!f_ignore)
+          return xrc;
+        rc = xrc;
       }
     }
   }
@@ -1195,6 +1293,7 @@ node_get(NODE *nip,
   
   if (f_acls) {
     if (S_ISLNK(nip->s.st_mode)) {
+#if HAVE_ACL_GET_LINK_NP
 #ifdef ACL_TYPE_NFS4
       nip->a.nfs = acl_get_link_np(nip->p, ACL_TYPE_NFS4);
 #endif
@@ -1203,6 +1302,10 @@ node_get(NODE *nip,
 #endif
 #ifdef ACL_TYPE_ACCESS
       nip->a.def = acl_get_link_np(nip->p, ACL_TYPE_DEFAULT);
+#endif
+#else
+      errno = EINVAL;
+      return -1;
 #endif
     } else {
 #ifdef ACL_TYPE_NFS4
@@ -1905,6 +2008,8 @@ check_new_or_updated(const char *key,
     /* Update after subdirectory has been traversed to preserve timestamps */
     if (f_update) {
       /* Refresh dst node */
+      /* XXX: get dst_nip */
+      
       rc = node_update(src_nip, NULL, dstpath);
       if (rc < 0) {
 	if (f_debug)
