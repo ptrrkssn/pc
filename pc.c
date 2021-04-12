@@ -557,7 +557,7 @@ file_copy(const char *srcpath,
   off_t sbytes, tbytes;
   int src_fd = -1, dst_fd = -1, rc = -1;
   int holed = 0;
-#if HAVE_AIO_READ
+#if defined(HAVE_AIO_WAITCOMPLETE)
   char bufv[2][128*1024];
   struct aiocb cb[2], *cbp;
   int ap;
@@ -585,7 +585,7 @@ file_copy(const char *srcpath,
   sbytes = 0;
   tbytes = 0;
 
-#if defined(HAVE_AIO_READ)
+#if defined(HAVE_AIO_WAITCOMPLETE)
   /* Start first read */
   memset(&cb, 0, sizeof(cb));
   cb[0].aio_fildes = src_fd;

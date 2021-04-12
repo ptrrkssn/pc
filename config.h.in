@@ -9,6 +9,9 @@
 /* Define to 1 if you have the `acl_get_link_np' function. */
 #undef HAVE_ACL_GET_LINK_NP
 
+/* Define to 1 if you have the `acl_set_file' function. */
+#undef HAVE_ACL_SET_FILE
+
 /* Define to 1 if you have the `acl_set_link_np' function. */
 #undef HAVE_ACL_SET_LINK_NP
 
@@ -17,6 +20,9 @@
 
 /* Define to 1 if you have the `aio_read' function. */
 #undef HAVE_AIO_READ
+
+/* Define to 1 if you have the `aio_waitcomplete' function. */
+#undef HAVE_AIO_WAITCOMPLETE
 
 /* Define to 1 if you have the `extattr_get_file' function. */
 #undef HAVE_EXTATTR_GET_FILE

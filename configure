@@ -4357,7 +4357,7 @@ if test "$ac_res" != no; then :
 fi
 
 
-for ac_func in lchflags lchmod utimensat lutimes extattr_get_file getxattr acl_get_file acl_set_link_np acl_get_link_np acl aio_read
+for ac_func in lchflags lchmod utimensat lutimes extattr_get_file getxattr acl_get_file acl_set_file acl_set_link_np acl_get_link_np acl aio_read aio_waitcomplete
 do :
   as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
 ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
