@@ -41,6 +41,6 @@ AC_SEARCH_LIBS([SHA256_Init], [md])
 AC_SEARCH_LIBS([SHA384_Init], [md])
 AC_SEARCH_LIBS([SHA512_Init], [md])
 
-AC_CHECK_FUNCS([lchmod utimensat lutimes extattr_get_file getxattr acl_get_file acl_set_link_np acl_get_link_np acl aio_read])
+AC_CHECK_FUNCS([lchflags lchmod utimensat lutimes extattr_get_file getxattr acl_get_file acl_set_link_np acl_get_link_np acl aio_read])
 
 AC_OUTPUT([Makefile])

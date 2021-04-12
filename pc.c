@@ -876,28 +876,26 @@ node_update(NODE *src_nip,
         if (S_ISLNK(src_nip->s.st_mode)) {
 #if HAVE_ACL_SET_LINK_NP
           xrc = acl_set_link_np(dstpath, ACL_TYPE_NFS4, src_nip->a.nfs);
-          if (xrc < 0)
-            fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_NFS4): %s\n",
-                    argv0, dstpath, strerror(errno));
 #else
           errno = ENOSYS;
           xrc = -1;
 #endif
           if (xrc < 0) {
+            fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_NFS4): %s\n",
+                    argv0, dstpath, strerror(errno));
             if (!f_ignore)
               return xrc;
             rc = xrc;
           }
         }
       } else {
-          xrc = acl_set_file(dstpath, ACL_TYPE_NFS4, src_nip->a.nfs);
-          if (xrc < 0) {
-            fprintf(stderr, "%s: Error: %s: acl_set_file(ACL_TYPE_NFS4): %s\n",
-                    argv0, dstpath, strerror(errno));
-            if (!f_ignore)
-              return xrc;
-            rc = xrc;
-          }
+        xrc = acl_set_file(dstpath, ACL_TYPE_NFS4, src_nip->a.nfs);
+        if (xrc < 0) {
+          fprintf(stderr, "%s: Error: %s: acl_set_file(ACL_TYPE_NFS4): %s\n",
+                  argv0, dstpath, strerror(errno));
+          if (!f_ignore)
+            return xrc;
+          rc = xrc;
         }
       }
     }
@@ -910,14 +908,13 @@ node_update(NODE *src_nip,
         if (S_ISLNK(src_nip->s.st_mode)) {
 #if HAVE_ACL_SET_LINK_NP
           xrc = acl_set_link_np(dstpath, ACL_TYPE_ACCESS, src_nip->a.nfs);
-          if (xrc < 0)
-            fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_ACCESS): %s\n",
-                    argv0, dstpath, strerror(errno));
 #else
           errno = ENOSYS;
           xrc = -1;
 #endif
           if (xrc < 0) {
+            fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_ACCESS): %s\n",
+                    argv0, dstpath, strerror(errno));
             if (!f_ignore)
               return xrc;
             rc = xrc;
@@ -943,14 +940,13 @@ node_update(NODE *src_nip,
         if (S_ISLNK(src_nip->s.st_mode)) {
 #if HAVE_ACL_SET_LINK_NP
           xrc = acl_set_link_np(dstpath, ACL_TYPE_DEFAULT, src_nip->a.nfs);
-          if (xrc < 0)
-            fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_DEFAULT): %s\n",
-                    argv0, dstpath, strerror(errno));
 #else
           errno = ENOSYS;
           xrc = -1;
 #endif
           if (xrc < 0) {
+            fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_DEFAULT): %s\n",
+                    argv0, dstpath, strerror(errno));
             if (!f_ignore)
               return xrc;
             rc = xrc;
@@ -1029,7 +1025,7 @@ node_update(NODE *src_nip,
 #endif
   }
   
-#ifdef UF_ARCHIVE
+#if defined(HAVE_LCHFLAGS)
   if (f_flags) {
     if (!dst_nip ||
         (src_nip->s.st_flags & ~UF_ARCHIVE) != (dst_nip->s.st_flags & ~UF_ARCHIVE)) {
