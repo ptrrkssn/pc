@@ -71,9 +71,6 @@
 #include "attrs.h"
 
 
-#if defined(HAVE_LCHFLAGS) && !defined(UF_ARCHIVE)
-#define UF_ARCHIVE 0
-#endif
 
 /* 
  * Node information
@@ -162,7 +159,8 @@ int f_owner   = 0;
 int f_times   = 0;
 int f_acls    = 0;
 int f_attrs   = 0;
-int f_flags   = 0; /* Check file flags, special UF_ARCHIVE handling if > 1 */
+int f_flags   = 0; /* Check and copy file flags */
+int f_aflag   = 0; /* Check the special UF_ARCHIVE flag and reset it when copying files */
 int f_digest  = 0; /* Generate and check a content digest for files */
 size_t f_bufsize = 128*1024;
 
@@ -1035,10 +1033,16 @@ node_update(NODE *src_nip,
   }
   
 #if defined(HAVE_LCHFLAGS)
+  /* XXX: Should we care about the UF_ARCHIVE flag here? */
+# ifdef UF_ARCHIVE
+#  define XUF_ARCHIVE UF_ARCHIVE
+# else
+#  define XUF_ARCHIVE 0
+# endif
   if (f_flags) {
     if (!dst_nip ||
-        (src_nip->s.st_flags & ~UF_ARCHIVE) != (dst_nip->s.st_flags & ~UF_ARCHIVE)) {
-      xrc = lchflags(dstpath, src_nip->s.st_flags);
+        (src_nip->s.st_flags & ~XUF_ARCHIVE) != (dst_nip->s.st_flags & ~XUF_ARCHIVE)) {
+      xrc = lchflags(dstpath, (src_nip->s.st_flags & ~XUF_ARCHIVE));
       if (xrc < 0) {
 	fprintf(stderr, "%s: Error: %s: lchflags: %s\n",
 		argv0, dstpath, strerror(errno));
@@ -1047,8 +1051,11 @@ node_update(NODE *src_nip,
         rc = xrc;
       }
     }
-    
-    if (f_flags > 1 && (src_nip->s.st_flags & UF_ARCHIVE)) {
+  }
+
+#ifdef UF_ARCHIVE
+  if (f_aflag) {
+    if (src_nip->s.st_flags & UF_ARCHIVE) {
       xrc = lchflags(src_nip->p,
                      (src_nip->s.st_flags & ~UF_ARCHIVE));
       if (xrc < 0) {
@@ -1061,7 +1068,8 @@ node_update(NODE *src_nip,
     }
   }
 #endif
-
+#endif
+  
   return rc;
 }
 
@@ -2531,7 +2539,7 @@ OPTION opts[] = {
   { 'r', "recurse",     NULL,        "Recurse into subdirectories", 0, NULL },
   { 'p', "preserve",    NULL,        "Check and preserve mode bits", 0, NULL },
   { 'o', "owner",       NULL,        "Check and preserve owner & group", 0, NULL },
-  { 't', "times",       NULL,        "Check mtime (and preserve mtime and atime if '-tt')", 0, NULL },
+  { 't', "times",       NULL,        "Check mtime (and preserve mtime & atime if -tt)", 0, NULL },
   { 'x', "expunge",     NULL,        "Remove/replace deleted/changed objects", 0, NULL },
   { 'u', "no-copy",     NULL,        "Do not copy file contents", 0, NULL },
   { 'z', "zero-fill",   NULL,        "Try to generate zero-holed files", 0, NULL },
@@ -2542,9 +2550,12 @@ OPTION opts[] = {
   { 'X', "attributes",  NULL,        "Copy extended attributes", 0, NULL },
 #endif
 #if defined(HAVE_LCHFLAGS)
-  { 'F', "file-flags",  NULL,        "Copy file flags (and check/update 'uarch' if '-FF')", 0, NULL },
+  { 'F', "file-flags",  NULL,        "Copy file flags", 0, NULL },
+#if defined(UF_ARCHIVE)
+  { 'U', "archive-flag",  NULL,      "Check and update source archive flags", 0, NULL },
 #endif
-  { 'a', "archive",     NULL,        "Archive mode (equal to '-rpottAXFF')", 0, NULL },
+#endif
+  { 'a', "archive",     NULL,        "Archive mode (equal to '-rpottAXFU')", 0, NULL },
   { 'M', "mirror",      NULL,        "Mirror mode (equal to '-ax')", 0, NULL },
   { 'B', "buffer-size", "<size>",    "Set copy buffer size", OPT_SIZE, &f_bufsize },
   { 'D', "digest",      "<digest>",  "Set file content digest algorithm", 0, NULL },
@@ -2684,6 +2695,11 @@ main(int argc,
       case 'F':
 	++f_flags;
 	break;
+#if defined(UF_ARCHIVE)
+      case 'U':
+	++f_aflag;
+	break;
+#endif
 #endif
       case 'M':
 	f_remove = 1;
@@ -2694,8 +2710,9 @@ main(int argc,
 	f_attrs   = 1;
 	f_perms   = 1; /* Copy permission bits */
 	f_owner   = 1; /* Copy owner/group */
-	f_times   = 2; /* Exact mtime comparision */
-	f_flags   = 2; /* Handle UF_ARCHIVE magic */
+	f_times   = 1; /* Exact mtime comparision */
+	f_flags   = 1; /* Copy file flags */
+	f_aflag   = 1; /* UF_ARCHIVE handling */
 	break;
 
       case 'D':

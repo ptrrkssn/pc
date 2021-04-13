@@ -10,7 +10,7 @@ to avoid/copying files unless it has been modified/differs from the source.
 
 USAGE
   pc [<options>] <src-1> [... <src-N>] <dst>
-
+  
 Options:
   -h | --help                          Display this information
   -v | --verbose                       Increase verbosity
@@ -27,14 +27,15 @@ Options:
   -z | --zero-fill                     Try to generate zero-holed files
   -A | --acls                          Copy ACLs
   -X | --attributes                    Copy extended attributes
-  -F | --file-flags                    Copy file flags (and check/update 'uarch' if '-FF')
+  -F | --file-flags                    Copy file flags
+  -U | --archive-flag                  Check and reset source archive flags
   -a | --archive                       Archive mode (equal to '-rpottAXFF')
   -M | --mirror                        Mirror mode (equal to '-ax')
   -B | --buffer-size    <size>         Set copy buffer size [131072]
   -D | --digest         <digest>       Set file content digest algorithm
 
 Digests:
-  NONE, ADLER32, CRC32, MD5, SKEIN256, SHA256, SHA384, SHA512
+  NONE, ADLER32, CRC32, MD5, SKEIN256, SKEIN1024 SHA256, SHA512, SHA3-256, SHA3-512
 
 Usage:
   Options may be specified multiple times (-vv), or values may be specified
@@ -58,6 +59,17 @@ PLATFORMS
 - FreeBSD (tested on 12.2)
 - Linux (tested on Ubuntu 20.04)
 - MacOS (tested on 10.15)
+
+
+DEPENDENCIES
+
+- zlib (for the ADLER32 & CRC32 digests)
+
+Plus atleast one of the following for SHA and more digests:
+
+- nettle (preferably)
+- libmd (second choice)
+- openssl (if nothing else...)
 
 
 AUTHOR
