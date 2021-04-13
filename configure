@@ -4720,6 +4720,9 @@ fi
 
 fi
 
+
+   unset ac_cv_func_SHA256_Init
+   unset ac_cv_func_SHA512_Init
    for ac_func in MD5_Init SHA256_Init SHA512_Init
 do :
   as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`

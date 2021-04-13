@@ -132,6 +132,9 @@ if test "x$with_openssl" != "xno"; then
    AC_CHECK_HEADERS([openssl/md5.h openssl/sha.h])
    AC_SEARCH_LIBS([SHA512_Init], [crypto], [], [
      AC_SEARCH_LIBS([MD5_Init], [crypto])])
+     
+   unset ac_cv_func_SHA256_Init
+   unset ac_cv_func_SHA512_Init
    AC_CHECK_FUNCS([MD5_Init SHA256_Init SHA512_Init])
 fi
 
