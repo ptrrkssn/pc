@@ -55,23 +55,22 @@
 #endif
 
 #if defined(HAVE_NETTLE_SHA2_H)
-#include <nettle/sha2.h>
-#else
-#if defined(HAVE_SHA256_H)
-#include <sha256.h>
-#endif
-#if defined(HAVE_SHA512_H)
-#include <sha512.h>
-#endif
+#  include <nettle/sha2.h>
+#elif defined(HAVE_OPENSSL_SHA_H)
+#  include <openssl/sha.h>
+#else /* libmd */
+#  if defined(HAVE_SHA256_H)
+#    include <sha256.h>
+#  endif
+#  if defined(HAVE_SHA512_H)
+#    include <sha512.h>
+#  endif
 #endif
 
 #if defined(HAVE_NETTLE_SHA3_H)
 #include <nettle/sha3.h>
 #endif
 
-#if defined(HAVE_OPENSSL_SHA_H)
-#include <openssl/sha.h>
-#endif
 
 
 typedef enum {
@@ -168,7 +167,7 @@ typedef struct digest {
 #ifdef SKEIN1024_DIGEST_LENGTH
 #define DIGEST_BUFSIZE_SKEIN1024 SKEIN1024_DIGEST_LENGTH
 #else
-#define DIGEST_BUFSIZE_SKEIN256 128
+#define DIGEST_BUFSIZE_SKEIN1024 128
 #endif
 
 #if defined(SHA256_DIGEST_SIZE)

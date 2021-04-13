@@ -67,7 +67,17 @@ fi
 
 AC_ARG_WITH([zlib],
   AS_HELP_STRING([--without-zlib], [Don't build support for zlib-provided digests]))
-  
+
+AC_ARG_WITH([nettle],
+  AS_HELP_STRING([--without-nettle], [Don't build support for Nettle-provided digests]))
+
+AC_ARG_WITH([md],
+  AS_HELP_STRING([--without-md], [Don't build support for MD-provided digests]))
+
+AC_ARG_WITH([openssl],
+  AS_HELP_STRING([--without-openssl], [Don't build support for OpenSSL-provided digests]))
+
+
 if test "x$with_zlib" != "xno"; then
    AC_CHECK_HEADERS([zlib.h])
    AC_SEARCH_LIBS([crc32_z], [z], [], [
@@ -75,9 +85,6 @@ if test "x$with_zlib" != "xno"; then
    AC_CHECK_FUNCS([adler32_z crc32_z])
 fi
 
-
-AC_ARG_WITH([nettle],
-  AS_HELP_STRING([--without-nettle], [Don't build support for Nettle-provided digests]))
 
 if test "x$with_nettle" != "xno"; then
    AC_CHECK_HEADERS([nettle/md5.h nettle/sha2.h nettle/sha3.h])
@@ -87,9 +94,6 @@ if test "x$with_nettle" != "xno"; then
 fi
 
 
-AC_ARG_WITH([md],
-  AS_HELP_STRING([--without-md], [Don't build support for MD-provided digests]))
-
 if test "x$with_md" != "xno"; then
    AC_CHECK_HEADERS([md5.h skein.h sha256.h sha512.h])
    AC_SEARCH_LIBS([SHA512_Init], [md], [], [
@@ -98,8 +102,9 @@ if test "x$with_md" != "xno"; then
 fi
 
 
-AC_ARG_WITH([openssl],
-  AS_HELP_STRING([--without-openssl], [Don't build support for OpenSSL-provided digests]))
+
+if test "x$ac_cv_func_sha512_init" != "xyes"; then
+# Only check for OpenSSL if MD not found due to conflicts
 
 if test "x$with_openssl" != "xno"; then
    AC_CHECK_HEADERS([openssl/md5.h openssl/sha.h])
@@ -108,7 +113,7 @@ if test "x$with_openssl" != "xno"; then
    AC_CHECK_FUNCS([MD5_Init SHA256_Init SHA512_Init])
 fi
 
-
+fi
 
 AC_CHECK_FUNCS([lchmod utimensat lutimes])
 

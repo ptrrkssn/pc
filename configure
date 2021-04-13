@@ -4085,6 +4085,28 @@ if test "${with_zlib+set}" = set; then :
 fi
 
 
+
+# Check whether --with-nettle was given.
+if test "${with_nettle+set}" = set; then :
+  withval=$with_nettle;
+fi
+
+
+
+# Check whether --with-md was given.
+if test "${with_md+set}" = set; then :
+  withval=$with_md;
+fi
+
+
+
+# Check whether --with-openssl was given.
+if test "${with_openssl+set}" = set; then :
+  withval=$with_openssl;
+fi
+
+
+
 if test "x$with_zlib" != "xno"; then
    for ac_header in zlib.h
 do :
@@ -4224,13 +4246,6 @@ _ACEOF
 fi
 done
 
-fi
-
-
-
-# Check whether --with-nettle was given.
-if test "${with_nettle+set}" = set; then :
-  withval=$with_nettle;
 fi
 
 
@@ -4374,13 +4389,6 @@ _ACEOF
 fi
 done
 
-fi
-
-
-
-# Check whether --with-md was given.
-if test "${with_md+set}" = set; then :
-  withval=$with_md;
 fi
 
 
@@ -4528,11 +4536,8 @@ fi
 
 
 
-# Check whether --with-openssl was given.
-if test "${with_openssl+set}" = set; then :
-  withval=$with_openssl;
-fi
-
+if test "x$ac_cv_func_sha512_init" != "xyes"; then
+# Only check for OpenSSL if MD not found due to conflicts
 
 if test "x$with_openssl" != "xno"; then
    for ac_header in openssl/md5.h openssl/sha.h
@@ -4676,7 +4681,7 @@ done
 
 fi
 
-
+fi
 
 for ac_func in lchmod utimensat lutimes
 do :
