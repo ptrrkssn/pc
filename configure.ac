@@ -120,10 +120,10 @@ if test "x$with_md" != "xno"; then
        AC_SEARCH_LIBS([MD5Init], [md], [have_libmd=yes])])
    fi
    if test "x$have_libmd" = "xyes"; then
-     AC_CHECK_FUNCS([SKEIN256_Init SKEIN1024_Init])
+     AC_CHECK_FUNCS([MD5Init SKEIN256_Init SKEIN1024_Init])
      
      dnl No need for OpenSSL if these are found
-     AC_CHECK_FUNCS([MD5Init SHA256_Init SHA512_Init], [with_openssl=no])
+     AC_CHECK_FUNCS([SHA256_Init SHA512_Init], [with_openssl=no])
    fi
 fi
 
