@@ -18,7 +18,7 @@ BINDIR      = @bindir@
 MANDIR      = @mandir@
 MAN1DIR     = ${MANDIR}/man1
 
-CC       = @CC@
+CC       = @CC@ -Wall
 INSTALL  = @INSTALL@
 
 CPPFLAGS = @CPPFLAGS@
