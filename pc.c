@@ -69,7 +69,7 @@
 #include "btree.h"
 #include "digest.h"
 #include "attrs.h"
-
+#include "misc.h"
 
 
 /* 
@@ -178,304 +178,6 @@ in_gidset(gid_t g) {
 
   return 0;
 }
-
-/* 
- * Concatenate the list of strings (and at first NULL) into a dynamically allocated buffer
- */
-char *
-strdupcat(const char *str,
-	  ...) {
-  va_list ap;
-  char *retval, *res;
-  const char *cp;
-  size_t reslen;
-
-  /* Get the length of the first string, plus 1 for ending NUL */
-  reslen = strlen(str)+1;
-
-  /* Add length of the other strings */
-  va_start(ap, str);
-  while ((cp = va_arg(ap, char *)) != NULL)
-    reslen += strlen(cp);
-  va_end(ap);
-
-  /* Allocate storage */
-  retval = res = malloc(reslen);
-  if (!retval)
-    return NULL;
-
-  /* Get the first string */
-  cp = str;
-  while (*cp)
-    *res++ = *cp++;
-  
-  /* And then append the rest */
-  va_start(ap, str);
-  while ((cp = va_arg(ap, char *)) != NULL) {
-    while (*cp)
-      *res++ = *cp++;
-  }
-  va_end(ap);
-
-  /* NUL-terminate the string */
-  *res = '\0';
-  return retval;
-}
-
-
-
-int
-str2size(const char **str,
-	 size_t *vp) {
-  size_t base = 1000, vbm, sbm, v, sv;
-  int rc = 0, rv = 0, sign = 1;
-  char c, i;
-
-  
-  *vp = 0;
-
-  if (**str == '-' && isdigit((*str)[1])) {
-    ++*str;
-    sign = -1;
-  }
-  
-  while (**str && isdigit(**str)) {
-    c = i = 0;
-
-    if ((*str)[0] == '0' && (*str)[1] == 'x') {
-      ++*str;
-      ++*str;
-      
-      rc = sscanf(*str, "%lx%c%c", &v, &c, &i);
-      if (rc < 1)
-	return -1;
-      
-      while (**str && isxdigit(**str))
-	++*str;
-      
-      rv = 1;
-    } else {
-      rc = sscanf(*str, "%ld%c%c", &v, &c, &i);
-      if (rc < 1)
-	return -1;
-      
-      while (**str && isdigit(**str))
-	++*str;
-      
-      rv = 1;
-    }
-
-    if (c) {
-      if (i == 'i') {
-	++*str;
-	base = 1024;
-      }
-    }
-
-    switch (toupper(c)) {
-    case 'K':
-      vbm = base;
-      sbm = 1;
-      break;
-      
-    case 'M':
-      vbm = base*base;
-      sbm = base;
-      break;
-      
-    case 'G':
-      vbm = base*base*base;
-      sbm = base*base;
-      break;
-      
-    case 'T':
-      vbm = base*base*base*base;
-      sbm = base*base*base;
-      break;
-      
-    case 'P':
-      vbm = base*base*base*base;
-      sbm = base*base*base;
-      break;
-      
-    default:
-      c = 0;
-      vbm = 1;
-      sbm = 1;
-      break;
-    }
-
-    v *= vbm;
-    
-    if (c) {
-      int nd = 0;
-      ++*str;
-      sv = 0;
-      while (isdigit(**str)) {
-	sv *= 10;
-	sv += **str - '0';
-	++nd;
-	++*str;
-      }
-      switch (nd) {
-      case 1:
-	sv *= 100;
-	break;
-      case 2:
-	sv *= 10;
-	break;
-      }
-      
-      v += sv*sbm;
-    }
-    
-    *vp += v;
-    
-    if (**str == '+')
-      ++*str;
-    else
-      break;
-  }
-  
-  *vp *= sign;
-  return rv;
-}
- 
-char *
-size2str(size_t b,
-	 char *buf,
-	 size_t bufsize,
-	int b2f) {
-  int base = 1000;
-  size_t t;
-  
-  
-  if (b2f)
-    base = 1024;
-
-  if (b == 0) {
-    strcpy(buf, "0");
-    return buf;
-  }
-  
-  t = b/base;
-  if (b < 10000 && (t*base != b)) {
-    snprintf(buf, bufsize, "%ld", b);
-    return buf;
-  }
-  
-  b /= base;
-  t = b/base;
-  if (b < 10000 && (t*base != b)) {
-    snprintf(buf, bufsize, "%ld K%s", b, b2f == 1 ? "i" : "");
-    return buf;
-  }
-  
-  b /= base;
-  t = b/base;
-  if (b < 10000 && (t*base != b)) {
-    snprintf(buf, bufsize, "%ld M%s", b, b2f == 1 ? "i" : "");
-    return buf;
-  }
-  
-  b /= base;
-  t = b/base;
-  if (b < 10000 && (t*base != b)) {
-    snprintf(buf, bufsize, "%ld G%s", b, b2f == 1 ? "i" : "");
-    return buf;
-  }
-  
-  b /= base;
-  t = b/base;
-  if (b < 10000 && (t*base != b)) {
-    snprintf(buf, bufsize, "%ld T%s", b, b2f == 1 ? "i" : "");
-    return buf;
-  }
-  
-  snprintf(buf, bufsize, "%ld P%s", b, b2f == 1 ? "i" : "");
-  return buf;
-}
-
-
-char *
-time2str(time_t t,
-	 char *buf,
-	 size_t bufsize,
-	 int abs_f) {
-  if (abs_f) {
-    struct tm *tp = localtime(&t);
-    
-    strftime(buf, bufsize, "%Y-%m-%d %H:%M:%S", tp);
-    return buf;
-  }
-  
-    
-  if (labs(t) < 120) {
-    snprintf(buf, bufsize, "%lds", t);
-    return buf;
-  }
-
-  t /= 60;
-  if (labs(t) < 120) {
-    snprintf(buf, bufsize, "%ldm", t);
-    return buf;
-  }
-
-  t /= 60;
-  if (labs(t) < 48) {
-    snprintf(buf, bufsize, "%ldh", t);
-    return buf;
-  }
-  
-  t /= 24;
-  if (labs(t) < 14) {
-    snprintf(buf, bufsize, "%ldD", t);
-    return buf;
-  }
-  
-  if (labs(t) < 60) {
-    t /= 7;
-    snprintf(buf, bufsize, "%ldW", t);
-    return buf;
-  }
-
-  if (labs(t) < 365*2) {
-    t /= 30;
-    snprintf(buf, bufsize, "%ldM", t);
-    return buf;
-  }
-
-  t /= 365;
-  snprintf(buf, bufsize, "%ldY", t);
-  return buf;
-}
-
-
-/*
- * Compare two timespec structures
- * Returns: -1 if a < b, 1 if a > b, and 0 if equal
- */
-int
-timespec_compare(struct timespec *a,
-		 struct timespec *b) {
-  if (a->tv_sec == b->tv_sec) {
-    if (a->tv_nsec < b->tv_nsec)
-      return -1;
-    if (a->tv_nsec > b->tv_nsec)
-      return 1;
-    return 0;
-  }
-
-  if (a->tv_sec < b->tv_sec)
-    return -1;
-  if (a->tv_sec > b->tv_sec)
-    return 1;
-
-  return 0;
-}
-
-
-
 
 
 int
@@ -1594,9 +1296,10 @@ print_hex(const unsigned char *buf,
 /*
  * Print Extended Attribute
  */
-int attr_print(const char *key,
-	       void *val,
-	       void *extra) {
+int
+attr_print(const char *key,
+	   void *val,
+	   void *extra) {
   ATTR *aip = (ATTR *) val;
 
   printf("      %s = ", key);
@@ -1610,9 +1313,10 @@ int attr_print(const char *key,
 }
 
 
-int node_print(const char *key,
-	       void *val,
-	       void *extra) {
+int
+node_print(const char *key,
+	   void *val,
+	   void *extra) {
   NODE *nip = (NODE *) val;
   int verbose = 0;
 
