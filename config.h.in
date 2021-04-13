@@ -15,6 +15,9 @@
 /* Define to 1 if you have the `acl_set_link_np' function. */
 #undef HAVE_ACL_SET_LINK_NP
 
+/* Define to 1 if you have the `adler32_z' function. */
+#undef HAVE_ADLER32_Z
+
 /* Define to 1 if you have the <aio.h> header file. */
 #undef HAVE_AIO_H
 
@@ -24,8 +27,20 @@
 /* Define to 1 if you have the `aio_waitcomplete' function. */
 #undef HAVE_AIO_WAITCOMPLETE
 
-/* Define to 1 if you have the `extattr_get_file' function. */
-#undef HAVE_EXTATTR_GET_FILE
+/* Define to 1 if you have the `chflags' function. */
+#undef HAVE_CHFLAGS
+
+/* Define to 1 if you have the `crc32_z' function. */
+#undef HAVE_CRC32_Z
+
+/* Define to 1 if you have the `extattr_delete_link' function. */
+#undef HAVE_EXTATTR_DELETE_LINK
+
+/* Define to 1 if you have the `extattr_get_link' function. */
+#undef HAVE_EXTATTR_GET_LINK
+
+/* Define to 1 if you have the `extattr_set_link' function. */
+#undef HAVE_EXTATTR_SET_LINK
 
 /* Define to 1 if you have the `getxattr' function. */
 #undef HAVE_GETXATTR
@@ -39,6 +54,12 @@
 /* Define to 1 if you have the `lchmod' function. */
 #undef HAVE_LCHMOD
 
+/* Define to 1 if you have the `lgetxattr' function. */
+#undef HAVE_LGETXATTR
+
+/* Define to 1 if you have the `lsetxattr' function. */
+#undef HAVE_LSETXATTR
+
 /* Define to 1 if you have the `lutimes' function. */
 #undef HAVE_LUTIMES
 
@@ -46,24 +67,72 @@
    to 0 otherwise. */
 #undef HAVE_MALLOC
 
+/* Define to 1 if you have the `MD5Init' function. */
+#undef HAVE_MD5INIT
+
 /* Define to 1 if you have the <md5.h> header file. */
 #undef HAVE_MD5_H
 
+/* Define to 1 if you have the `MD5_Init' function. */
+#undef HAVE_MD5_INIT
+
 /* Define to 1 if you have the <memory.h> header file. */
 #undef HAVE_MEMORY_H
+
+/* Define to 1 if you have the <nettle/md5.h> header file. */
+#undef HAVE_NETTLE_MD5_H
+
+/* Define to 1 if you have the `nettle_md5_init' function. */
+#undef HAVE_NETTLE_MD5_INIT
+
+/* Define to 1 if you have the `nettle_sha256_init' function. */
+#undef HAVE_NETTLE_SHA256_INIT
+
+/* Define to 1 if you have the <nettle/sha2.h> header file. */
+#undef HAVE_NETTLE_SHA2_H
+
+/* Define to 1 if you have the `nettle_sha3_256_init' function. */
+#undef HAVE_NETTLE_SHA3_256_INIT
+
+/* Define to 1 if you have the `nettle_sha3_512_init' function. */
+#undef HAVE_NETTLE_SHA3_512_INIT
+
+/* Define to 1 if you have the <nettle/sha3.h> header file. */
+#undef HAVE_NETTLE_SHA3_H
+
+/* Define to 1 if you have the `nettle_sha512_init' function. */
+#undef HAVE_NETTLE_SHA512_INIT
+
+/* Define to 1 if you have the <openssl/md5.h> header file. */
+#undef HAVE_OPENSSL_MD5_H
+
+/* Define to 1 if you have the <openssl/sha.h> header file. */
+#undef HAVE_OPENSSL_SHA_H
 
 /* Define to 1 if your system has a GNU libc compatible `realloc' function,
    and to 0 otherwise. */
 #undef HAVE_REALLOC
 
+/* Define to 1 if you have the `setxattr' function. */
+#undef HAVE_SETXATTR
+
 /* Define to 1 if you have the <sha256.h> header file. */
 #undef HAVE_SHA256_H
 
-/* Define to 1 if you have the <sha384.h> header file. */
-#undef HAVE_SHA384_H
+/* Define to 1 if you have the `SHA256_Init' function. */
+#undef HAVE_SHA256_INIT
 
 /* Define to 1 if you have the <sha512.h> header file. */
 #undef HAVE_SHA512_H
+
+/* Define to 1 if you have the `SHA512_Init' function. */
+#undef HAVE_SHA512_INIT
+
+/* Define to 1 if you have the `SKEIN1024_Init' function. */
+#undef HAVE_SKEIN1024_INIT
+
+/* Define to 1 if you have the `SKEIN256_Init' function. */
+#undef HAVE_SKEIN256_INIT
 
 /* Define to 1 if you have the <skein.h> header file. */
 #undef HAVE_SKEIN_H
@@ -157,10 +226,6 @@
 
 /* Define to `int' if <sys/types.h> doesn't define. */
 #undef uid_t
-
-/* Define to the type of an unsigned integer type of width exactly 16 bits if
-   such a type exists and the standard includes do not define it. */
-#undef uint16_t
 
 /* Define to the type of an unsigned integer type of width exactly 32 bits if
    such a type exists and the standard includes do not define it. */

@@ -41,35 +41,53 @@ DIGEST_TYPE
 digest_str2type(const char *s) {
   if (strcasecmp(s, "NONE") == 0)
     return DIGEST_TYPE_NONE;
-#if HAVE_ADLER32
+
+#if defined(HAVE_ADLER32_Z)
   if (strcasecmp(s, "ADLER32") == 0 || strcasecmp(s, "ADLER-32") == 0)
     return DIGEST_TYPE_ADLER32;
 #endif
-#if HAVE_CRC32
+
+#if defined(HAVE_CRC32_Z)
   if (strcasecmp(s, "CRC32") == 0 || strcasecmp(s, "CRC-32") == 0)
     return DIGEST_TYPE_CRC32;
 #endif
-#if HAVE_MD5
+
+#if defined(HAVE_NETTLE_MD5_INIT) || defined(HAVE_MD5_INIT) || defined(HAVE_MD5INIT)
   if (strcasecmp(s, "MD5") == 0 || strcasecmp(s, "MD-5") == 0)
     return DIGEST_TYPE_MD5;
 #endif
-#if HAVE_SKEIN256
+
+#if defined(HAVE_SKEIN256_INIT)
   if (strcasecmp(s, "SKEIN256") == 0 || strcasecmp(s, "SKEIN-256") == 0)
     return DIGEST_TYPE_SKEIN256;
 #endif
-#if HAVE_SHA256
-  if (strcasecmp(s, "SHA256") == 0 || strcasecmp(s, "SHA-256") == 0)
+
+#if defined(HAVE_SKEIN1024_INIT)
+  if (strcasecmp(s, "SKEIN1024") == 0 || strcasecmp(s, "SKEIN-1024") == 0)
+    return DIGEST_TYPE_SKEIN1024;
+#endif
+
+#if defined(HAVE_SHA256_INIT) || defined(HAVE_NETTLE_SHA256_INIT)
+  if (strcasecmp(s, "SHA256") == 0 || strcasecmp(s, "SHA-256") == 0 ||
+      strcasecmp(s, "SHA2-256") == 0 || strcasecmp(s, "SHA2-256") == 0)
     return DIGEST_TYPE_SHA256;
 #endif
-#if HAVE_SHA384
-  if (strcasecmp(s, "SHA384") == 0 || strcasecmp(s, "SHA-384") == 0)
-    return DIGEST_TYPE_SHA384;
-#endif
-#if HAVE_SHA512
-  if (strcasecmp(s, "SHA512") == 0 || strcasecmp(s, "SHA-512") == 0)
+
+#if defined(HAVE_SHA512_INIT) || defined(HAVE_NETTLE_SHA512_INIT)
+  if (strcasecmp(s, "SHA512") == 0 || strcasecmp(s, "SHA-512") == 0 ||
+      strcasecmp(s, "SHA2-512") == 0 || strcasecmp(s, "SHA2-512") == 0)
     return DIGEST_TYPE_SHA512;
 #endif
 
+#if defined(HAVE_NETTLE_SHA3_256_INIT)
+  if (strcasecmp(s, "SHA3-256") == 0)
+    return DIGEST_TYPE_SHA3_256;
+#endif
+
+#if defined(HAVE_NETTLE_SHA3_512_INIT)
+  if (strcasecmp(s, "SHA3-512") == 0)
+    return DIGEST_TYPE_SHA3_512;
+#endif
   return -1;
 }
 
@@ -80,33 +98,49 @@ digest_type2str(DIGEST_TYPE type) {
   case DIGEST_TYPE_NONE:
     return "NONE";
 
-#if HAVE_ADLER32
+#if defined(HAVE_ADLER32_Z)
   case DIGEST_TYPE_ADLER32:
     return "ADLER32";
 #endif
-#if HAVE_CRC32
+
+#if defined(HAVE_CRC32_Z)
   case DIGEST_TYPE_CRC32:
     return "CRC32";
 #endif
-#if HAVE_MD5
+
+#if defined(HAVE_NETTLE_MD5_INIT) || defined(HAVE_MD5_INIT) || defined(HAVE_MD5INIT)
   case DIGEST_TYPE_MD5:
     return "MD5";
 #endif
-#if HAVE_SKEIN256
+
+#if defined(HAVE_SKEIN256_INIT)
   case DIGEST_TYPE_SKEIN256:
     return "SKEIN256";
 #endif
-#if HAVE_SHA256
+
+#if defined(HAVE_SKEIN1024_INIT)
+  case DIGEST_TYPE_SKEIN1024:
+    return "SKEIN1024";
+#endif
+
+#if defined(HAVE_SHA256_INIT) || defined(HAVE_NETTLE_SHA256_INIT)
   case DIGEST_TYPE_SHA256:
     return "SHA256";
 #endif
-#if HAVE_SHA384
-  case DIGEST_TYPE_SHA384:
-    return "SHA384";
-#endif
-#if HAVE_SHA512
+
+#if defined(HAVE_SHA512_INIT) || defined(HAVE_NETTLE_SHA512_INIT)
   case DIGEST_TYPE_SHA512:
     return "SHA512";
+#endif
+
+#if defined(HAVE_NETTLE_SHA3_256_INIT)
+  case DIGEST_TYPE_SHA3_256:
+    return "SHA3-256";
+#endif
+
+#if defined(HAVE_NETTLE_SHA3_512_INIT)
+  case DIGEST_TYPE_SHA3_512:
+    return "SHA3-512";
 #endif
 
   default:
@@ -129,44 +163,107 @@ digest_init(DIGEST *dp,
   case DIGEST_TYPE_NONE:
     break;
 
-#if HAVE_ADLER32
   case DIGEST_TYPE_ADLER32:
+#if defined(HAVE_ADLER32_Z)
     dp->ctx.adler32 = adler32_z(0L, NULL, 0);
     break;
-#endif
-#if HAVE_CRC32
-  case DIGEST_TYPE_CRC32:
-    dp->ctx.crc32 = crc32_z(0L, NULL, 0);
-    break;
-#endif    
-#if HAVE_MD5
-  case DIGEST_TYPE_MD5:
-    MD5Init(&dp->ctx.md5);
-    break;
-#endif
-#if HAVE_SKEIN256
-  case DIGEST_TYPE_SKEIN256:
-    SKEIN256_Init(&dp->ctx.skein256);
-    break;
-#endif
-#if HAVE_SHA256
-  case DIGEST_TYPE_SHA256:
-    SHA256_Init(&dp->ctx.sha256);
-    break;
-#endif
-#if HAVE_SHA384
-  case DIGEST_TYPE_SHA384:
-    SHA384_Init(&dp->ctx.sha384);
-    break;
-#endif
-#if HAVE_SHA512
-  case DIGEST_TYPE_SHA512:
-    SHA512_Init(&dp->ctx.sha512);
-    break;
+#else
+    errno = ENOSYS;
+    return -1;
 #endif
 
+  case DIGEST_TYPE_CRC32:
+#if defined(HAVE_CRC32_Z)
+    dp->ctx.crc32 = crc32_z(0L, NULL, 0);
+    break;
+#else
+    errno = ENOSYS;
+    return -1;
+#endif
+
+  case DIGEST_TYPE_MD5:
+#if defined(HAVE_NETTLE_MD5_INIT)
+    md5_init(&dp->ctx.md5);
+    break;
+#elif defined(HAVE_MD5_INIT)
+    MD5_Init(&dp->ctx.md5);
+    break;
+#elif defined(HAVE_MD5INIT)
+    MD5Init(&dp->ctx.md5);
+    break;
+#else
+    errno = ENOSYS;
+    return -1;
+#endif
+
+  case DIGEST_TYPE_SKEIN256:
+#if defined(HAVE_SKEIN256_INIT)
+    SKEIN256_Init(&dp->ctx.skein256);
+    break;
+#else
+    errno = ENOSYS;
+    return -1;
+#endif
+    
+  case DIGEST_TYPE_SKEIN1024:
+#if defined(HAVE_SKEIN1024_INIT)
+    SKEIN1024_Init(&dp->ctx.skein1024);
+    break;
+#else
+    errno = ENOSYS;
+    return -1;
+#endif
+    
+  case DIGEST_TYPE_SHA256:
+#if defined(HAVE_NETTLE_SHA256_INIT)
+    sha256_init(&dp->ctx.sha256);
+    break;
+#elif defined(HAVE_SHA256_INIT)
+    SHA256_Init(&dp->ctx.sha256);
+    break;
+#else
+    errno = ENOSYS;
+    return -1;
+#endif
+    
+  case DIGEST_TYPE_SHA512:
+#if defined(HAVE_NETTLE_SHA512_INIT)
+    sha512_init(&dp->ctx.sha512);
+    break;
+#elif defined(HAVE_SHA512_INIT)
+    SHA512_Init(&dp->ctx.sha512);
+    break;
+#else
+    errno = ENOSYS;
+    return -1;
+#endif
+
+  case DIGEST_TYPE_SHA3_256:
+#if defined(HAVE_NETTLE_SHA3_256_INIT)
+    sha3_256_init(&dp->ctx.sha3_256);
+    break;
+#else
+    errno = ENOSYS;
+    return -1;
+#endif
+
+  case DIGEST_TYPE_SHA3_512:
+#if defined(HAVE_NETTLE_SHA3_512_INIT)
+    sha3_512_init(&dp->ctx.sha3_512);
+    break;
+#else
+    errno = ENOSYS;
+    return -1;
+#endif
+
+#if 1
+  case DIGEST_TYPE_INVALID:
+    errno = EINVAL;
+    return -1;
+#else
   default:
     return -1;
+#endif
   }
 
   dp->type = type;
@@ -188,44 +285,110 @@ digest_update(DIGEST *dp,
   case DIGEST_STATE_INIT:
   case DIGEST_STATE_UPDATE:
     switch (dp->type) {
-#if HAVE_ADLER32
+    case DIGEST_TYPE_NONE:
+      break;
+      
     case DIGEST_TYPE_ADLER32:
+#if defined(HAVE_ADLER32_Z)
       dp->ctx.adler32 = adler32_z(dp->ctx.adler32, buf, bufsize);
       break;
+#else
+      errno = ENOSYS;
+      return -1;
 #endif
-#if HAVE_CRC32
+
     case DIGEST_TYPE_CRC32:
+#if defined(HAVE_CRC32_Z)
       dp->ctx.crc32 = crc32_z(dp->ctx.crc32, buf, bufsize);
       break;
+#else
+      errno = ENOSYS;
+      return -1;
 #endif      
-#if HAVE_MD5
+
     case DIGEST_TYPE_MD5:
+#if defined(HAVE_NETTLE_MD5_INIT)
+      md5_update(&dp->ctx.md5, bufsize, buf);
+      break;
+#elif defined(HAVE_MD5_INIT)
+      MD5_Update(&dp->ctx.md5, buf, bufsize);
+      break;
+#elif defined(HAVE_MD5INIT)
       MD5Update(&dp->ctx.md5, buf, bufsize);
       break;
+#else
+      errno = ENOSYS;
+      return -1;
 #endif      
-#if HAVE_SKEIN256
+
     case DIGEST_TYPE_SKEIN256:
+#if defined(HAVE_SKEIN256_INIT)
       SKEIN256_Update(&dp->ctx.skein256, buf, bufsize);
       break;
+#else
+      errno = ENOSYS;
+      return -1;
 #endif      
-#if HAVE_SHA256
+
+    case DIGEST_TYPE_SKEIN1024:
+#if defined(HAVE_SKEIN1024_INIT)
+      SKEIN1024_Update(&dp->ctx.skein1024, buf, bufsize);
+      break;
+#else
+      errno = ENOSYS;
+      return -1;
+#endif      
+
     case DIGEST_TYPE_SHA256:
+#if defined(HAVE_NETTLE_SHA256_INIT)
+      sha256_update(&dp->ctx.sha256, bufsize, buf);
+      break;
+#elif defined(HAVE_SHA256_INIT)
       SHA256_Update(&dp->ctx.sha256, buf, bufsize);
       break;
-#endif      
-#if HAVE_SHA384
-    case DIGEST_TYPE_SHA384:
-      SHA384_Update(&dp->ctx.sha384, buf, bufsize);
-      break;
-#endif      
-#if HAVE_SHA512
+#else
+      errno = ENOSYS;
+      return -1;
+#endif
+
     case DIGEST_TYPE_SHA512:
+#if defined(HAVE_NETTLE_SHA512_INIT)
+      sha512_update(&dp->ctx.sha512, bufsize, buf);
+      break;
+#elif defined(HAVE_SHA512_INIT)
       SHA512_Update(&dp->ctx.sha512, buf, bufsize);
       break;
+#else
+      errno = ENOSYS;
+      return -1;
 #endif      
+
+    case DIGEST_TYPE_SHA3_256:
+#if defined(HAVE_NETTLE_SHA3_256_INIT)
+      sha3_256_update(&dp->ctx.sha3_256, bufsize, buf);
+      break;
+#else
+      errno = ENOSYS;
+      return -1;
+#endif
       
+    case DIGEST_TYPE_SHA3_512:
+#if defined(HAVE_NETTLE_SHA3_512_INIT)
+      sha3_512_update(&dp->ctx.sha3_512, bufsize, buf);
+      break;
+#else
+      errno = ENOSYS;
+      return -1;
+#endif
+
+#if 1
+  case DIGEST_TYPE_INVALID:
+    errno = EINVAL;
+    return -1;
+#else
     default:
       return -1;
+#endif
     }
     break;
     
@@ -262,79 +425,149 @@ digest_final(DIGEST *dp,
       rlen = 0;
       break;
       
-#if HAVE_ADLER32
     case DIGEST_TYPE_ADLER32:
       if (bufsize < DIGEST_BUFSIZE_ADLER32) {
 	errno = EOVERFLOW;
 	return -1;
       }
-      * (uint32_t *) buf = htonl(dp->ctx.adler32);
       rlen = DIGEST_BUFSIZE_ADLER32;
+#if defined(HAVE_ADLER32_Z)
+      * (uint32_t *) buf = htonl(dp->ctx.adler32);
       break;
+#else
+      errno = ENOSYS;
+      return -1;
 #endif
-#if HAVE_CRC32
+      
     case DIGEST_TYPE_CRC32:
       if (bufsize < DIGEST_BUFSIZE_CRC32) {
 	errno = EOVERFLOW;
 	return -1;
       }
-      * (uint32_t *) buf = htonl(dp->ctx.crc32);
       rlen = DIGEST_BUFSIZE_CRC32;
+#if defined(HAVE_CRC32_Z)
+      * (uint32_t *) buf = htonl(dp->ctx.crc32);
       break;
-#endif      
-#if HAVE_MD5
+#else
+      errno = ENOSYS;
+      return -1;
+#endif
+
     case DIGEST_TYPE_MD5:
       if (bufsize < DIGEST_BUFSIZE_MD5) {
 	errno = EOVERFLOW;
 	return -1;
       }
-      MD5Final(buf, &dp->ctx.md5);
       rlen = DIGEST_BUFSIZE_MD5;
+#if defined(HAVE_NETTLE_MD5_INIT)
+      md5_digest(&dp->ctx.md5, DIGEST_BUFSIZE_MD5, buf);
       break;
-#endif      
-#if HAVE_SKEIN256
+#elif defined(HAVE_MD5_INIT)
+      MD5_Final(buf, &dp->ctx.md5);
+      break;
+#elif defined(HAVE_MD5INIT)
+      MD5Final(buf, &dp->ctx.md5);
+      break;
+#else
+      errno = ENOSYS;
+      return -1;
+#endif
+      
     case DIGEST_TYPE_SKEIN256:
       if (bufsize < DIGEST_BUFSIZE_SKEIN256) {
 	errno = EOVERFLOW;
 	return -1;
       }
-      SKEIN256_Final(buf, &dp->ctx.skein256);
       rlen = DIGEST_BUFSIZE_SKEIN256;
+#if defined(HAVE_SKEIN256_INIT)
+      SKEIN256_Final(buf, &dp->ctx.skein256);
       break;
-#endif      
-#if HAVE_SHA256
+#else
+      errno = ENOSYS;
+      return -1;
+#endif
+      
+    case DIGEST_TYPE_SKEIN1024:
+      if (bufsize < DIGEST_BUFSIZE_SKEIN1024) {
+	errno = EOVERFLOW;
+	return -1;
+      }
+      rlen = DIGEST_BUFSIZE_SKEIN1024;
+#if defined(HAVE_SKEIN1024_INIT)
+      SKEIN1024_Final(buf, &dp->ctx.skein1024);
+      break;
+#else
+      errno = ENOSYS;
+      return -1;
+#endif
+      
     case DIGEST_TYPE_SHA256:
       if (bufsize < DIGEST_BUFSIZE_SHA256) {
 	errno = EOVERFLOW;
 	return -1;
       }
-      SHA256_Final(buf, &dp->ctx.sha256);
       rlen = DIGEST_BUFSIZE_SHA256;
+#if defined(HAVE_NETTLE_SHA256_INIT)
+      sha256_digest(&dp->ctx.sha256, DIGEST_BUFSIZE_SHA256, buf);
       break;
-#endif      
-#if HAVE_SHA384
-    case DIGEST_TYPE_SHA384:
-      if (bufsize < DIGEST_BUFSIZE_SHA384) {
-	errno = EOVERFLOW;
-	return -1;
-      }
-      SHA384_Final(buf, &dp->ctx.sha384);
-      rlen = DIGEST_BUFSIZE_SHA384;
+#elif defined(HAVE_SHA256_INIT)
+      SHA256_Final(buf, &dp->ctx.sha256);
       break;
+#else
+      errno = ENOSYS;
+      return -1;
 #endif      
-#if HAVE_SHA512
+
     case DIGEST_TYPE_SHA512:
       if (bufsize < DIGEST_BUFSIZE_SHA512) {
 	errno = EOVERFLOW;
 	return -1;
       }
-      SHA512_Final(buf, &dp->ctx.sha512);
       rlen = DIGEST_BUFSIZE_SHA512;
+#if defined(HAVE_NETTLE_SHA512_INIT)
+      sha512_digest(&dp->ctx.sha512, DIGEST_BUFSIZE_SHA512, buf);
       break;
+#elif defined(HAVE_SHA512_INIT)
+      SHA512_Final(buf, &dp->ctx.sha512);
+      break;
+#else
+      errno = ENOSYS;
+      return -1;
 #endif
+      
+    case DIGEST_TYPE_SHA3_256:
+      if (bufsize < DIGEST_BUFSIZE_SHA3_256) {
+	errno = EOVERFLOW;
+	return -1;
+      }
+#if defined(HAVE_NETTLE_SHA3_256_INIT)
+      sha3_256_digest(&dp->ctx.sha3_256, DIGEST_BUFSIZE_SHA3_256, buf);
+      rlen = DIGEST_BUFSIZE_SHA3_256;
+      break;
+#else
+      errno = ENOSYS;
+      return -1;
+#endif
+
+    case DIGEST_TYPE_SHA3_512:
+      if (bufsize < DIGEST_BUFSIZE_SHA3_512) {
+	errno = EOVERFLOW;
+	return -1;
+      }
+#if defined(HAVE_NETTLE_SHA3_512_INIT)
+      sha3_512_digest(&dp->ctx.sha3_512, DIGEST_BUFSIZE_SHA3_512, buf);
+      rlen = DIGEST_BUFSIZE_SHA3_512;
+      break;
+#else
+      errno = ENOSYS;
+      return -1;
+#endif
+
+#if 0
     default:
       errno = EINVAL;
       return -1;
+#endif
     }
     break;
     

@@ -38,51 +38,57 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#if HAVE_ZLIB_H
+#if defined(HAVE_ZLIB_H)
 #include <zlib.h>
-#define HAVE_ADLER32 1
-#define HAVE_CRC32   1
 #endif
 
-#if HAVE_MD5_H
+#if defined(HAVE_NETTLE_MD5_H)
+#include <nettle/md5.h>
+#elif defined(HAVE_OPENSSL_MD5_H)
+#include <openssl/md5.h>
+#elif defined(HAVE_MD5_H)
 #include <md5.h>
-#define HAVE_MD5 1
 #endif
 
-#if HAVE_SKEIN_H
+#if defined(HAVE_SKEIN_H)
 #include <skein.h>
-#define HAVE_SKEIN256 1
 #endif
 
-#if HAVE_SHA256_H
+#if defined(HAVE_NETTLE_SHA2_H)
+#include <nettle/sha2.h>
+#else
+#if defined(HAVE_SHA256_H)
 #include <sha256.h>
-#define HAVE_SHA256 1
 #endif
-
-#if HAVE_SHA384_H
-#include <sha384.h>
-#define HAVE_SHA384 1
-#endif
-
-#if HAVE_SHA512_H
+#if defined(HAVE_SHA512_H)
 #include <sha512.h>
-#define HAVE_SHA512 1
+#endif
+#endif
+
+#if defined(HAVE_NETTLE_SHA3_H)
+#include <nettle/sha3.h>
+#endif
+
+#if defined(HAVE_OPENSSL_SHA_H)
+#include <openssl/sha.h>
 #endif
 
 
 typedef enum {
 	      DIGEST_TYPE_INVALID  = -1,
 	      DIGEST_TYPE_NONE     = 0,
-	      DIGEST_TYPE_ADLER32  = 1,
-	      DIGEST_TYPE_CRC32    = 2,
-	      DIGEST_TYPE_MD5      = 3,
-	      DIGEST_TYPE_SKEIN256 = 4,
-	      DIGEST_TYPE_SHA256   = 5,
-	      DIGEST_TYPE_SHA384   = 6,
-	      DIGEST_TYPE_SHA512   = 7,
+	      DIGEST_TYPE_ADLER32,
+	      DIGEST_TYPE_CRC32,
+	      DIGEST_TYPE_MD5,
+	      DIGEST_TYPE_SKEIN256,
+	      DIGEST_TYPE_SKEIN1024,
+	      DIGEST_TYPE_SHA256,
+	      DIGEST_TYPE_SHA512,
+	      DIGEST_TYPE_SHA3_256,
+	      DIGEST_TYPE_SHA3_512
 } DIGEST_TYPE;
+#define DIGEST_TYPE_LAST 11
 
-#define DIGEST_TYPE_BEST DIGEST_TYPE_SHA512
 
 typedef enum {
 	      DIGEST_STATE_NONE    = 0,
@@ -96,26 +102,44 @@ typedef struct digest {
   DIGEST_TYPE  type;
   DIGEST_STATE state;
   union {
-#if HAVE_CRC32
+#if defined(HAVE_CRC32_Z)
     uint32_t     crc32;
 #endif
-#if HAVE_ADLER32 
+#if defined(HAVE_ADLER32_Z)
     uint32_t     adler32;
 #endif
-#if HAVE_MD5
+
+#if defined(HAVE_NETTLE_MD5_INIT)
+    struct md5_ctx md5;
+#elif defined(HAVE_MD5INIT) || defined(HAVE_MD5_INIT)
     MD5_CTX      md5;
 #endif
-#if HAVE_SKEIN256
+
+#if defined(HAVE_SKEIN256_INIT)
     SKEIN256_CTX skein256;
 #endif
-#if HAVE_SHA256
+
+#if defined(HAVE_SKEIN1024_INIT)
+    SKEIN1024_CTX skein1024;
+#endif
+
+#if defined(HAVE_NETTLE_SHA256_INIT)
+    struct sha256_ctx sha256;
+#elif defined(HAVE_SHA256_INIT)
     SHA256_CTX   sha256;
 #endif
-#if HAVE_SHA384
-    SHA384_CTX   sha384;
-#endif
-#if HAVE_SHA512
+    
+#if defined(HAVE_NETTLE_SHA512_INIT)
+    struct sha512_ctx sha512;
+#elif defined(HAVE_SHA512_INIT)
     SHA512_CTX   sha512;
+#endif
+
+#if defined(HAVE_NETTLE_SHA3_256_INIT)
+    struct sha3_256_ctx sha3_256;
+#endif
+#if defined(HAVE_NETTLE_SHA3_512_INIT)
+    struct sha3_512_ctx sha3_512;
 #endif
   } ctx;
 } DIGEST;
@@ -124,28 +148,59 @@ typedef struct digest {
 /*
  * Result buffer sizes
  */
-#if HAVE_ADLER32
 #define DIGEST_BUFSIZE_ADLER32  sizeof(uint32_t)
-#endif
-#if HAVE_CRC32
 #define DIGEST_BUFSIZE_CRC32    sizeof(uint32_t)
-#endif
-#if HAVE_MD5
+
+#if defined(MD5_DIGEST_SIZE)
+#define DIGEST_BUFSIZE_MD5      MD5_DIGEST_SIZE
+#elif defined(MD5_DIGEST_LENGTH)
+#define DIGEST_BUFSIZE_MD5      MD5_DIGEST_LENGTH
+#else
 #define DIGEST_BUFSIZE_MD5      16
 #endif
-#if HAVE_SKEIN256
+
+#ifdef SKEIN256_DIGEST_LENGTH
+#define DIGEST_BUFSIZE_SKEIN256 SKEIN256_DIGEST_LENGTH
+#else
 #define DIGEST_BUFSIZE_SKEIN256 32
 #endif
-#if HAVE_SHA256
+
+#ifdef SKEIN1024_DIGEST_LENGTH
+#define DIGEST_BUFSIZE_SKEIN1024 SKEIN1024_DIGEST_LENGTH
+#else
+#define DIGEST_BUFSIZE_SKEIN256 128
+#endif
+
+#if defined(SHA256_DIGEST_SIZE)
+#define DIGEST_BUFSIZE_SHA256   SHA256_DIGEST_SIZE
+#elif defined(SHA256_DIGEST_LENGTH)
+#define DIGEST_BUFSIZE_SHA256   SHA256_DIGEST_LENGTH
+#else
 #define DIGEST_BUFSIZE_SHA256   32
 #endif
-#if HAVE_SHA384
-#define DIGEST_BUFSIZE_SHA384   48  
-#endif
-#if HAVE_SHA512
+
+#if defined(SHA256_DIGEST_SIZE)
+#define DIGEST_BUFSIZE_SHA512   SHA512_DIGEST_SIZE
+#elif defined(SHA512_DIGEST_LENGTH)
+#define DIGEST_BUFSIZE_SHA512   SHA512_DIGEST_LENGTH
+#else
 #define DIGEST_BUFSIZE_SHA512   64
 #endif
-#define DIGEST_BUFSIZE_MAX      64
+
+
+#if defined(SHA3_256_DIGEST_SIZE)
+#define DIGEST_BUFSIZE_SHA3_256 SHA3_256_DIGEST_SIZE
+#else
+#define DIGEST_BUFSIZE_SHA3_256 32
+#endif
+
+#if defined(SHA3_512_DIGEST_SIZE)
+#define DIGEST_BUFSIZE_SHA3_512 SHA3_512_DIGEST_SIZE
+#else
+#define DIGEST_BUFSIZE_SHA3_512 64
+#endif
+
+#define DIGEST_BUFSIZE_MAX DIGEST_BUFSIZE_SHA3_512
 
 
 extern int

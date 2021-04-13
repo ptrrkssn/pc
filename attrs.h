@@ -46,42 +46,34 @@
 #ifdef XATTR_NOFOLLOW
 /* MacOS */
 
-#define extattr_get_fd(fd, ns, name, data, size)     fgetxattr(fd, name, data, size, 0, 0)
 #define extattr_get_file(path, ns, name, data, size) getxattr(path, name, data, size, 0, 0)
 #define extattr_get_link(path, ns, name, data, size) getxattr(path, name, data, size, 0, XATTR_NOFOLLOW)
 
-#define extattr_set_fd(fd, ns, name, data, size)     fsetxattr(fd, name, data, size, 0, 0)
 #define extattr_set_file(path, ns, name, data, size) setxattr(path, name, data, size, 0, 0)
 #define extattr_set_link(path, ns, name, data, size) setxattr(path, name, data, size, 0, XATTR_NOFOLLOW)
 
-#define extattr_delete_fd(fd, ns, name)              fremovexattr(fd, name, 0)
 #define extattr_delete_file(path, ns, name)          removexattr(path, name, 0)
 #define extattr_delete_link(path, ns, name)          removexattr(path, name, XATTR_NOFOLLOW)
 
 /* Beware that buf is not formatted in the same way on FreeBSD vs the rest */
-#define extattr_list_fd(fd, ns, buf, size)	     flistxattr(fd, (char *) buf, size, 0)
 #define extattr_list_file(fd, ns, buf, size) 	     listxattr(fd, (char *) buf, size, 0)
 #define extattr_list_link(fd, ns, buf, size)	     listxattr(fd, (char *) buf, size, XATTR_NOFOLLOW)
 
 #else
 /* Linux */
   
-#define extattr_get_fd(fd, ns, name, data, size)     fgetxattr(fd, name, data, size)
 #define extattr_get_file(path, ns, name, data, size) getxattr(path, name, data, size)
 #define extattr_get_link(path, ns, name, data, size) lgetxattr(path, name, data, size)
 
-#define extattr_set_fd(fd, ns, name, data, size)     fsetxattr(fd, name, data, size, 0)
 #define extattr_set_file(path, ns, name, data, size) setxattr(path, name, data, size, 0)
 #define extattr_set_link(path, ns, name, data, size) lsetxattr(path, name, data, size, 0)
 
-#define extattr_delete_fd(fd, ns, name)              fremovexattr(fd, name)
 #define extattr_delete_file(path, ns, name)          removexattr(path, name)
 #define extattr_delete_link(path, ns, name)          lremovexattr(path, name)
 
 /* 
  * Beware that the buf is not formatted in the same way on FreeBSD (byte-length+data) vs the rest(NUL-terminated data)
  */
-#define extattr_list_fd(fd, ns, buf, size)	     flistxattr(fd, (char *) buf, size)
 #define extattr_list_file(fd, ns, buf, size) 	     listxattr(fd, (char *) buf, size)
 #define extattr_list_link(fd, ns, buf, size)	     llistxattr(fd, (char *) buf, size)
 

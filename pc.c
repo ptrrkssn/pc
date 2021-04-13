@@ -135,7 +135,6 @@ typedef struct attr {
 } ATTR;
 
 typedef struct attrupdate {
-  int fd;
   int ns;
   const char *pn;
   BTREE *attrs;
@@ -652,7 +651,8 @@ file_copy(const char *srcpath,
     cbp = NULL;
   }
   if (rc < 0) {
-    fprintf(stderr, "%s: Error: %s: aio_waitcomplete: %s\n", srcpath, strerror(errno));
+    fprintf(stderr, "%s: Error: %s: aio_waitcomplete: %s\n",
+	    argv0, srcpath, strerror(errno));
     rc = -1;
     goto End;
   }
@@ -743,11 +743,8 @@ attr_update(const char *key,
     if (bip && bip->len == aip->len && memcmp(bip->buf, aip->buf, bip->len) == 0)
       return 0; /* Already exists, and is identical */
   }
-  
-  if (aup->pn)
-    return extattr_set_link(aup->pn, aup->ns, key, aip->buf, aip->len);
 
-  return extattr_set_fd(aup->fd, aup->ns, key, aip->buf, aip->len);
+  return extattr_set_link(aup->pn, aup->ns, key, aip->buf, aip->len);
 }
 
 int
@@ -769,12 +766,9 @@ attr_remove(const char *key,
       return 0;
     }
   }
-  
+
   /* Nope - so delete it */
-  if (aup->pn)
-    return extattr_delete_link(aup->pn, aup->ns, key);
-  
-  return extattr_delete_fd(aup->fd, aup->ns, key);
+  return extattr_delete_link(aup->pn, aup->ns, key);
 }
 
 
@@ -839,8 +833,7 @@ node_update(NODE *src_nip,
   
   if (f_attrs) {
     ATTRUPDATE aub;
-    
-    aub.fd = -1;
+
     aub.pn = dstpath;
     
 #if defined(EXTATTR_NAMESPACE_SYSTEM)
@@ -2767,7 +2760,7 @@ main(int argc,
 	}
 	printf("\nDigests:\n  ");
 	n = 0;
-	for (k = DIGEST_TYPE_NONE; k <= DIGEST_TYPE_BEST; k++) {
+	for (k = DIGEST_TYPE_NONE; k <= DIGEST_TYPE_LAST; k++) {
 	  const char *s = digest_type2str(k);
 	  if (s)
 	    printf("%s%s", n++ ? ", " : "", s);

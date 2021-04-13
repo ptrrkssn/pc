@@ -1,7 +1,7 @@
 /*
  * btree.h - Binary Tree library
  *
- * Copyright (c) 2017 Peter Eriksson <pen@lysator.liu.se>
+ * Copyright (c) 2017-2021 Peter Eriksson <pen@lysator.liu.se>
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
