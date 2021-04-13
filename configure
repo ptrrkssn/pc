@@ -3899,6 +3899,19 @@ fi
 
 
 
+for ac_func in lchmod utimensat lutimes
+do :
+  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
+ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
+if eval test \"x\$"$as_ac_var"\" = x"yes"; then :
+  cat >>confdefs.h <<_ACEOF
+#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
+_ACEOF
+
+fi
+done
+
+
 
 
 # Check whether --with-aio was given.
@@ -4108,6 +4121,8 @@ fi
 
 
 if test "x$with_zlib" != "xno"; then
+   have_zlib_h=no
+   have_zlib=no
    for ac_header in zlib.h
 do :
   ac_fn_c_check_header_mongrel "$LINENO" "zlib.h" "ac_cv_header_zlib_h" "$ac_includes_default"
@@ -4115,12 +4130,13 @@ if test "x$ac_cv_header_zlib_h" = xyes; then :
   cat >>confdefs.h <<_ACEOF
 #define HAVE_ZLIB_H 1
 _ACEOF
-
+ have_zlib_h=yes
 fi
 
 done
 
-   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing crc32_z" >&5
+   if test "x$have_zlib_h" = "xyes"; then
+     { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing crc32_z" >&5
 $as_echo_n "checking for library containing crc32_z... " >&6; }
 if ${ac_cv_search_crc32_z+:} false; then :
   $as_echo_n "(cached) " >&6
@@ -4173,10 +4189,10 @@ $as_echo "$ac_cv_search_crc32_z" >&6; }
 ac_res=$ac_cv_search_crc32_z
 if test "$ac_res" != no; then :
   test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
-
+  have_zlib=yes
 else
 
-     { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing adler32_z" >&5
+       { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing adler32_z" >&5
 $as_echo_n "checking for library containing adler32_z... " >&6; }
 if ${ac_cv_search_adler32_z+:} false; then :
   $as_echo_n "(cached) " >&6
@@ -4229,12 +4245,14 @@ $as_echo "$ac_cv_search_adler32_z" >&6; }
 ac_res=$ac_cv_search_adler32_z
 if test "$ac_res" != no; then :
   test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
-
+  have_zlib=yes
 fi
 
 fi
 
-   for ac_func in adler32_z crc32_z
+   fi
+   if test "x$have_zlib" = "xyes"; then
+     for ac_func in adler32_z crc32_z
 do :
   as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
 ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
@@ -4246,10 +4264,13 @@ _ACEOF
 fi
 done
 
+   fi
 fi
 
 
 if test "x$with_nettle" != "xno"; then
+   have_nettle_h=no
+   have_nettle=no
    for ac_header in nettle/md5.h nettle/sha2.h nettle/sha3.h
 do :
   as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
@@ -4258,12 +4279,13 @@ if eval test \"x\$"$as_ac_Header"\" = x"yes"; then :
   cat >>confdefs.h <<_ACEOF
 #define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
 _ACEOF
-
+ have_nettle_h=yes
 fi
 
 done
 
-   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing nettle_sha3_512_init" >&5
+   if test "x$have_nettle_h" = "xyes"; then
+     { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing nettle_sha3_512_init" >&5
 $as_echo_n "checking for library containing nettle_sha3_512_init... " >&6; }
 if ${ac_cv_search_nettle_sha3_512_init+:} false; then :
   $as_echo_n "(cached) " >&6
@@ -4316,10 +4338,10 @@ $as_echo "$ac_cv_search_nettle_sha3_512_init" >&6; }
 ac_res=$ac_cv_search_nettle_sha3_512_init
 if test "$ac_res" != no; then :
   test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
-
+  have_nettle=yes
 else
 
-     { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing nettle_md5_init" >&5
+       { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing nettle_md5_init" >&5
 $as_echo_n "checking for library containing nettle_md5_init... " >&6; }
 if ${ac_cv_search_nettle_md5_init+:} false; then :
   $as_echo_n "(cached) " >&6
@@ -4372,12 +4394,14 @@ $as_echo "$ac_cv_search_nettle_md5_init" >&6; }
 ac_res=$ac_cv_search_nettle_md5_init
 if test "$ac_res" != no; then :
   test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
-
+  have_nettle=yes
 fi
 
 fi
 
-   for ac_func in nettle_md5_init nettle_sha256_init nettle_sha512_init nettle_sha3_256_init nettle_sha3_512_init
+   fi
+   if test "x$have_nettle" = "xyes"; then
+     for ac_func in nettle_sha3_256_init nettle_sha3_512_init
 do :
   as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
 ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
@@ -4389,10 +4413,26 @@ _ACEOF
 fi
 done
 
+
+          for ac_func in nettle_md5_init nettle_sha256_init nettle_sha512_init
+do :
+  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
+ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
+if eval test \"x\$"$as_ac_var"\" = x"yes"; then :
+  cat >>confdefs.h <<_ACEOF
+#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
+_ACEOF
+ with_openssl=no
+fi
+done
+
+   fi
 fi
 
 
 if test "x$with_md" != "xno"; then
+   have_libmd_h=no
+   have_libmd=no
    for ac_header in md5.h skein.h sha256.h sha512.h
 do :
   as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
@@ -4401,12 +4441,13 @@ if eval test \"x\$"$as_ac_Header"\" = x"yes"; then :
   cat >>confdefs.h <<_ACEOF
 #define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
 _ACEOF
-
+ have_libmd_h=yes
 fi
 
 done
 
-   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing SHA512_Init" >&5
+   if test "x$have_libmd_h" = "xyes"; then
+     { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing SHA512_Init" >&5
 $as_echo_n "checking for library containing SHA512_Init... " >&6; }
 if ${ac_cv_search_SHA512_Init+:} false; then :
   $as_echo_n "(cached) " >&6
@@ -4459,10 +4500,10 @@ $as_echo "$ac_cv_search_SHA512_Init" >&6; }
 ac_res=$ac_cv_search_SHA512_Init
 if test "$ac_res" != no; then :
   test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
-
+  have_libmd=yes
 else
 
-     { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing MD5Init" >&5
+       { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing MD5Init" >&5
 $as_echo_n "checking for library containing MD5Init... " >&6; }
 if ${ac_cv_search_MD5Init+:} false; then :
   $as_echo_n "(cached) " >&6
@@ -4515,12 +4556,14 @@ $as_echo "$ac_cv_search_MD5Init" >&6; }
 ac_res=$ac_cv_search_MD5Init
 if test "$ac_res" != no; then :
   test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
-
+  have_libmd=yes
 fi
 
 fi
 
-   for ac_func in MD5Init SKEIN256_Init SKEIN1024_Init SHA256_Init SHA512_Init
+   fi
+   if test "x$have_libmd" = "xyes"; then
+     for ac_func in SKEIN256_Init SKEIN1024_Init
 do :
   as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
 ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
@@ -4532,12 +4575,22 @@ _ACEOF
 fi
 done
 
+
+          for ac_func in MD5Init SHA256_Init SHA512_Init
+do :
+  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
+ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
+if eval test \"x\$"$as_ac_var"\" = x"yes"; then :
+  cat >>confdefs.h <<_ACEOF
+#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
+_ACEOF
+ with_openssl=no
+fi
+done
+
+   fi
 fi
 
-
-
-if test "x$ac_cv_func_sha512_init" != "xyes"; then
-# Only check for OpenSSL if MD not found due to conflicts
 
 if test "x$with_openssl" != "xno"; then
    for ac_header in openssl/md5.h openssl/sha.h
@@ -4680,21 +4733,6 @@ fi
 done
 
 fi
-
-fi
-
-for ac_func in lchmod utimensat lutimes
-do :
-  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
-ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
-if eval test \"x\$"$as_ac_var"\" = x"yes"; then :
-  cat >>confdefs.h <<_ACEOF
-#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
-_ACEOF
-
-fi
-done
-
 
 ac_config_files="$ac_config_files Makefile"
 
