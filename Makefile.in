@@ -40,7 +40,7 @@ misc.o: misc.c misc.h config.h Makefile
 
 
 pc: $(OBJS)
-	$(CC) -o pc $(OBJS) $(LIBS)
+	$(CC) -o pc $(OBJS) $(LDFLAGS) $(LIBS)
 
 
 
