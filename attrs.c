@@ -364,6 +364,7 @@ attr_foreach(const char *path,
 /* Solaris/Illumos/OmniOS */
 
 #include <dirent.h>
+#include <unistd.h>
 
 ssize_t
 attr_get(const char *path,
@@ -406,7 +407,6 @@ attr_set(const char *path,
 	 size_t size,
 	 int flags) {
   int fd;
-  struct stat sb;
   ssize_t len;
   
 
@@ -430,14 +430,13 @@ attr_delete(const char *path,
 	    int flags) {
   int fd, rc;
 
-  fd = attropen(path, ".", O_RDWR|((flags & ATTR_FLAG_NOFOLLOW) ? O_NOFOLLOW : 0), 0);
+  fd = attropen(path, ".", O_RDONLY|((flags & ATTR_FLAG_NOFOLLOW) ? O_NOFOLLOW : 0), 0);
   if (fd < 0)
     return -1;
 
-  /* XXX: Handle attribute directories */
+  /* XXX: Handle attribute directories (recurse down) */
   rc = unlinkat(fd, name, 0);
   close(fd);
-
   return rc;
 }
 
@@ -460,7 +459,7 @@ attr_foreach(const char *path,
   
   dfd = attropen(path, ".", O_RDONLY|((flags & ATTR_FLAG_NOFOLLOW) ? O_NOFOLLOW : 0));
   if (dfd < 0)
-    return NULL;
+    return -1;
 
   dp = fdopendir(dfd);
   if (!dp) {
@@ -469,7 +468,12 @@ attr_foreach(const char *path,
   }
 
   while ((dep = readdir(dp)) != NULL) {
-    /* XXX: Handle attribute directories */
+    if (strcmp(dep->d_name, ".") == 0 ||
+	strcmp(dep->d_name, "..") == 0 ||
+	strcmp(dep->d_name, "SUNWattr_ro") == 0 ||
+	strcmp(dep->d_name, "SUNWattr_rw") == 0)
+      continue;
+    
     rc = (*handler)(path, ns, dep->d_name, flags, xp);
     if (rc)
       break;

@@ -56,6 +56,8 @@
 #endif
 
 #if defined(HAVE_ACL)
+/* Solaris/OmniOS */
+
 typedef int acl_type_t;
 
 #define ACL_TYPE_NONE    0
@@ -80,11 +82,24 @@ acl_init(int count);
 extern void
 acl_free(void *vp);
 
+extern int
+acl_set_file(const char *path,
+	     acl_type_t type,
+	     acl_t ap);
+
+extern acl_t
+acl_get_file(const char *path,
+	     acl_type_t type);
+
 extern char *
-acl_to_text(acl_t *ap,
+acl_to_text(acl_t ap,
 	    ssize_t *len);
 	    
 #endif
 #endif
+
+extern int
+acl_compare(acl_t a,
+	    acl_t b);
 
 #endif

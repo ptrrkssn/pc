@@ -33,12 +33,14 @@
 
 #include "config.h"
 
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <errno.h>
 
 #include "acls.h"
 
-
-#if defined(HAVE_ACL_GET)
+#if defined(HAVE_ACL)
 
 acl_t
 acl_init(int count) {
@@ -52,6 +54,8 @@ acl_init(int count) {
   ap->type = ACL_TYPE_NONE;
   ap->sev = count;
   ap->nev = 0;
+
+  return ap;
 }
 
 
@@ -88,7 +92,7 @@ acl_get_file(const char *path,
   ap = acl_init(ne);
   if (!ap)
     return NULL;
-  
+
   switch (type) {
   case ACL_TYPE_POSIX:
     ne = acl(path, GETACL, ap->sev, ap->ev);
@@ -102,9 +106,102 @@ acl_get_file(const char *path,
     return NULL;
   }
 
+  ap->type = type;
   ap->nev = ne;
   return ap;
 }
 
+
+int
+acl_set_file(const char *path,
+	     acl_type_t type,
+	     acl_t ap) {
+  int rc;
+
+
+  if (ap->type != type) {
+    errno = EINVAL;
+    return -1;
+  }
+  
+  switch (ap->type) {
+  case ACL_TYPE_POSIX:
+    rc = acl(path, SETACL, ap->sev, ap->ev);
+    break;
+    
+  case ACL_TYPE_NFS4:
+    rc = acl(path, ACE_SETACL, ap->sev, ap->ev);
+    break;
+
+  default:
+    errno = ENOSYS;
+    rc = -1;
+  }
+
+  return rc;
+}
+
+
+char *
+acl_to_text(acl_t ap,
+	    ssize_t *len) {
+  int i;
+  size_t asize = sizeof(ap)+ap->nev*sizeof(GACE);
+  unsigned int sum = 0;
+  unsigned char *bp;
+  char buf[80];
+
+
+  /* XXX: This is a hack, _really_ print the ACL ACEs... */
+  
+  bp = (unsigned char *) ap;
+  for (i = 0; i < asize; i++)
+    sum += *bp++;
+
+  snprintf(buf, sizeof(buf), "      type=%d, entries=%d, cksum=0x%x\n", ap->type, ap->nev, sum);
+  return strdup(buf);
+}
+
+
 #endif
+
+
+
+int
+acl_compare(acl_t a,
+	    acl_t b) {
+  char *as, *bs;
+  int rc = 0;
+
+
+  if (!a && !b)
+    return 0;
+  
+  if (!a && b)
+    return -1;
+
+  if (a && !b)
+    return -1;
+  
+  /* Hack, do a better/faster comparision */
+  as = acl_to_text(a, NULL);
+  bs = acl_to_text(b, NULL);
+
+  if (!as && bs) {
+    acl_free(bs);
+    return -1;
+  }
+  
+  if (as && !bs) {
+    acl_free(as);
+    return 1;
+  }
+
+  rc = strcmp(as, bs);
+  
+  acl_free(as);
+  acl_free(bs);
+
+  return rc;
+}
 

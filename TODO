@@ -1,9 +1,10 @@
-* Clean up the code a bit
+* Clean up the code a bit more
 * Create a manual page
 * Better documentation
 * Smarter/more efficient comparision of ACLs
 * Handle NFSv4 ACLs on Linux
-* Add support for OmniOS
 * Add a remote mode
 * Expand the test suite
-* Support io_uring
+* Support io_uring on Linux
+* Support copying of Solaris fsattr (man fgetattr) - similar to file flags
+* Handle Solaris attribute directories (multiple levels of extended attributes)

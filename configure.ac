@@ -31,6 +31,8 @@ AC_FUNC_REALLOC
 
 AC_CHECK_FUNCS([lchmod utimensat lutimes attropen])
 
+AC_SEARCH_LIBS([socket], [socket])
+
 
 AC_ARG_WITH([aio],
  AS_HELP_STRING([--without-aio], [Don't build support for asynchronous I/O]))
@@ -45,7 +47,7 @@ AC_ARG_WITH([acls],
  AS_HELP_STRING([--without-acls], [Don't build support for ACLs]))
 
 if test "x$with_acls" != "xno"; then
-   AC_SEARCH_LIBS([acl_free], [acl sec])
+   AC_SEARCH_LIBS([acl], [acl])
    AC_CHECK_HEADERS([sys/acl.h])
    AC_CHECK_FUNCS([acl_get_file acl_set_file acl_set_link_np acl_get_link_np acl_get acl_set acl])
 fi

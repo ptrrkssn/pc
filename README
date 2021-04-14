@@ -8,6 +8,25 @@ Attributes & File Flags (depending on OS & filesystem support) and tries
 to avoid/copying files unless it has been modified/differs from the source. 
 
 
+OPERATING SYSTEMS
+
+  - FreeBSD (tested on 12.2)
+  - Linux (tested on Ubuntu 20)
+  - MacOS (tested on 10.15)
+  - Solaris/Illumos (tested on OmniOS)
+  
+
+LIMITATIONS
+
+Solaris/OmniOS:
+  - Only supports one level of filesystem extended attributes, does not recurse down
+  - No support for system attributes currently
+  - Does not print the ACLs (-vvv)
+
+Linux
+  - Doesn't handle NFSv4 ACLs (yet)
+
+
 USAGE
   pc [<options>] <src-1> [... <src-N>] <dst>
   

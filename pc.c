@@ -165,45 +165,6 @@ in_gidset(gid_t g) {
 }
 
 
-int
-acl_compare(acl_t a,
-	    acl_t b) {
-  char *as, *bs;
-  int rc = 0;
-
-
-  if (!a && !b)
-    return 0;
-  
-  if (!a && b)
-    return -1;
-
-  if (a && !b)
-    return -1;
-  
-  /* Hack, do a better/faster comparision */
-  as = acl_to_text(a, NULL);
-  bs = acl_to_text(b, NULL);
-
-  if (!as && bs) {
-    acl_free(bs);
-    return -1;
-  }
-  
-  if (as && !bs) {
-    acl_free(as);
-    return 1;
-  }
-
-  rc = strcmp(as, bs);
-  
-  acl_free(as);
-  acl_free(bs);
-
-  return rc;
-  
-}
-
 
 
 /*
@@ -1197,14 +1158,13 @@ attr_print(const char *key,
   if (aip) {
     printf("      %s = ", key);
     if (is_printable(aip->buf, aip->len))
-      printf("\"%s\"", aip->buf);
+      printf("\"%s\"\n", aip->buf);
     else {
       print_hex(aip->buf, aip->len);
       puts(" [hex]");
     }
   } else
-    printf("      %s", key);
-  putchar('\n');
+    printf("      %s\n", key);
   
   return 0;
 }
@@ -1280,7 +1240,7 @@ node_print(const char *key,
       acl_free(t);
     }
 #endif
-#if defined(ACL_TYPE_ACESS)
+#if defined(ACL_TYPE_ACCESS)
     if (nip->a.acc) {
       puts("    POSIX Access ACL:");
       char *t = acl_to_text(nip->a.acc, NULL);
@@ -1935,6 +1895,10 @@ check_new_or_updated(const char *key,
     d = 0;
     if (f_force || (d = node_compare(src_nip, dst_nip)) != 0) {
       /* Something is different */
+
+      if (f_debug)
+	fprintf(stderr, "check_new_or_updated: node_compare: rc=%d (0x%x) (errno=%s)\n",
+		d, d, strerror(errno));
       
       if (f_verbose) {
 	printf("! %s", dstpath);
