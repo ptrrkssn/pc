@@ -38,7 +38,7 @@
 #include "acls.h"
 
 
-#if defined(HAVE_ACE)
+#if defined(HAVE_ACL_GET)
 
 acl_t
 acl_init(int count) {

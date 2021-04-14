@@ -38,12 +38,16 @@
 
 #if defined(HAVE_ACL)
 # define acl_t sunacl_t
+# define acl_type_t sunacl_type_t
+# define acl_free sunacl_free
 #endif
 
 #include <sys/acl.h>
 
 #if defined(HAVE_ACL)
 # undef acl_t
+# undef acl_type_t
+# undef acl_free
 #endif
 
 #if defined(__APPLE__)
@@ -76,6 +80,10 @@ acl_init(int count);
 extern void
 acl_free(void *vp);
 
+extern char *
+acl_to_text(acl_t *ap,
+	    ssize_t *len);
+	    
 #endif
 #endif
 
