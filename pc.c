@@ -123,14 +123,6 @@ typedef struct dirpair {
 } DIRPAIR;
 
 
-/* 
- * Extended Attributes 
- */
-typedef struct attr {
-  size_t len;
-  unsigned char buf[];
-} ATTR;
-
 typedef struct attrupdate {
   int ns;
   const char *pn;
@@ -186,6 +178,9 @@ acl_compare(acl_t a,
   char *as, *bs;
   int rc = 0;
 
+
+  if (!a && !b)
+    return 0;
   
   if (!a && b)
     return -1;
@@ -198,12 +193,12 @@ acl_compare(acl_t a,
   bs = acl_to_text(b, NULL);
 
   if (!as && bs) {
-    free(bs);
+    acl_free(bs);
     return -1;
   }
   
   if (as && !bs) {
-    free(as);
+    acl_free(as);
     return 1;
   }
 
@@ -444,7 +439,7 @@ attr_update(const char *key,
       return 0; /* Already exists, and is identical */
   }
 
-  return extattr_set_link(aup->pn, aup->ns, key, aip->buf, aip->len);
+  return attr_set(aup->pn, aup->ns, key, aip->buf, aip->len, ATTR_FLAG_NOFOLLOW);
 }
 
 int
@@ -468,7 +463,7 @@ attr_remove(const char *key,
   }
 
   /* Nope - so delete it */
-  return extattr_delete_link(aup->pn, aup->ns, key);
+  return attr_delete(aup->pn, aup->ns, key, ATTR_FLAG_NOFOLLOW);
 }
 
 
@@ -860,13 +855,11 @@ attrs_get(const char *objpath,
       exit(1);
     }
 
-    if (is_link)
-      adsize = extattr_get_link(objpath, attrnamespace, an, ad->buf, adsize);
-    else
-      adsize = extattr_get_file(objpath, attrnamespace, an, ad->buf, adsize);
+    adsize = attr_get(objpath, attrnamespace, an, ad->buf, adsize,
+		      is_link ? ATTR_FLAG_NOFOLLOW : 0);
     
     if (adsize < 0) {
-      fprintf(stderr, "%s: Error: %s: extattr_get_file(%s): %s\n",
+      fprintf(stderr, "%s: Error: %s: attr_get(%s): %s\n",
 	      argv0, objpath, an, strerror(errno));
       exit(1);
     }
@@ -1063,10 +1056,12 @@ node_get(NODE *nip,
   
   if (f_attrs) {
 #if defined(EXTATTR_NAMESPACE_SYSTEM)
-    nip->x.sys = attrs_get(nip->p, S_ISLNK(nip->s.st_mode), EXTATTR_NAMESPACE_SYSTEM);
+    nip->x.sys = attr_list(nip->p, EXTATTR_NAMESPACE_SYSTEM,
+			   S_ISLNK(nip->s.st_mode) ? ATTR_FLAG_NOFOLLOW : 0);
 #endif
 #if defined(EXTATTR_NAMESPACE_USER)
-    nip->x.usr = attrs_get(nip->p, S_ISLNK(nip->s.st_mode), EXTATTR_NAMESPACE_USER);
+    nip->x.sys = attr_list(nip->p, EXTATTR_NAMESPACE_USER,
+			   S_ISLNK(nip->s.st_mode) ? ATTR_FLAG_NOFOLLOW : 0);
 #endif
   }
 
@@ -1470,9 +1465,9 @@ dirpair_recurse(DIRPAIR *dp,
 
 
 int
-attr_compare_handler(const char *key,
-		     void *vp,
-		     void *xp) {
+attrs_compare_handler(const char *key,
+		      void *vp,
+		      void *xp) {
   ATTR *aip = (ATTR *) vp;
   ATTR *bip = NULL;
   BTREE *btp = (BTREE *) xp;
@@ -1493,15 +1488,15 @@ attr_compare_handler(const char *key,
 
 
 int
-attr_compare(BTREE *a,
-	     BTREE *b) {
+attrs_compare(BTREE *a,
+	      BTREE *b) {
   int rc;
 
 
   if (f_debug)
-    fprintf(stderr, "*** attr_compare a=%p, b=%p\n", a, b);
+    fprintf(stderr, "*** attrs_compare a=%p, b=%p\n", a, b);
   
-  rc = btree_foreach(a, attr_compare_handler, (void *) b);
+  rc = btree_foreach(a, attrs_compare_handler, (void *) b);
   if (rc) {
     if (f_debug)
       fprintf(stderr, "ATTRS a->b differs: %d\n", rc);
@@ -1509,7 +1504,7 @@ attr_compare(BTREE *a,
   }
 
   if (f_remove && b) {
-    rc = btree_foreach(b, attr_compare_handler, (void *) a);
+    rc = btree_foreach(b, attrs_compare_handler, (void *) a);
     if (rc) {
       if (f_debug)
 	fprintf(stderr, "ATTRS b->a differs: %d\n", rc);
@@ -1613,11 +1608,11 @@ node_compare(NODE *a,
   if (f_attrs) {
 #if defined(EXTATTR_NAMESPACE_SYSTEM)
     /* Check Extended Attributes */
-    if (a->x.sys && attr_compare(a->x.sys, b->x.sys))
+    if (a->x.sys && attrs_compare(a->x.sys, b->x.sys))
       d |= 0x01000000;
 #endif
 #if defined(EXTATTR_NAMESPACE_USER)
-    if (a->x.usr && attr_compare(a->x.usr, b->x.usr))
+    if (a->x.usr && attrs_compare(a->x.usr, b->x.usr))
       d |= 0x02000000;
 #endif
   }

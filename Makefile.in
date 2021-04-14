@@ -26,12 +26,13 @@ CFLAGS   = @CFLAGS@
 LDFLAGS  = @LDFLAGS@
 LIBS     = @LIBS@
 
-OBJS = pc.o btree.o digest.o misc.o
+OBJS = pc.o attrs.o btree.o digest.o misc.o
 
 all: pc
 
 
 pc.o: pc.c digest.h btree.h config.h Makefile
+attrs.o: attrs.c attrs.h btree.h config.h Makefile
 digest.o: digest.c digest.h config.h Makefile
 btree.o: btree.c btree.h config.h Makefile
 misc.o: misc.c misc.h config.h Makefile

@@ -27,6 +27,9 @@
 /* Define to 1 if you have the `aio_waitcomplete' function. */
 #undef HAVE_AIO_WAITCOMPLETE
 
+/* Define to 1 if you have the `attropen' function. */
+#undef HAVE_ATTROPEN
+
 /* Define to 1 if you have the `chflags' function. */
 #undef HAVE_CHFLAGS
 

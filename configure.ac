@@ -1,7 +1,7 @@
 dnl configure.ac for pc
 
 AC_PREREQ([2.69])
-AC_INIT([pc], [0.3], [pen@lysator.liu.se], [pc], [https://github.com/ptrrkssn/pc])
+AC_INIT([pc], [0.4], [pen@lysator.liu.se], [pc], [https://github.com/ptrrkssn/pc])
 
 AC_CONFIG_SRCDIR([pc.c])
 AC_CONFIG_HEADERS([config.h])
@@ -29,7 +29,7 @@ AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
 AC_FUNC_MALLOC
 AC_FUNC_REALLOC
 
-AC_CHECK_FUNCS([lchmod utimensat lutimes])
+AC_CHECK_FUNCS([lchmod utimensat lutimes attropen])
 
 
 AC_ARG_WITH([aio],
@@ -51,13 +51,14 @@ if test "x$with_acls" != "xno"; then
 fi
 
 
-dnl AC_ARG_WITH([attrs],
-dnl  AS_HELP_STRING([--without-attrs], [Don't build support for extended attributes]))
+AC_ARG_WITH([attrs],
+  AS_HELP_STRING([--without-attrs], [Don't build support for attributes]))
 
 if test "x$with_attrs" != "xno"; then
    AC_CHECK_HEADERS([sys/extattr.h sys/xattr.h])
-   AC_CHECK_FUNCS([extattr_get_link extattr_set_link extattr_delete_link getxattr lgetxattr setxattr lsetxattr])
+   AC_CHECK_FUNCS([extattr_get_link extattr_set_link extattr_delete_link getxattr lgetxattr setxattr lsetxattr attropen])
 fi
+
 
 AC_ARG_WITH([fflags],
  AS_HELP_STRING([--without-fflags], [Don't build support for file flags]))

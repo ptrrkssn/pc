@@ -40,46 +40,66 @@
 
 #if HAVE_SYS_XATTR_H
 #include <sys/xattr.h>
+#endif
 
-#define EXTATTR_NAMESPACE_SYSTEM 0
 
-#ifdef XATTR_NOFOLLOW
-/* MacOS */
+typedef struct attr {
+  size_t len;
+  unsigned char buf[];
+} ATTR;
 
-#define extattr_get_file(path, ns, name, data, size) getxattr(path, name, data, size, 0, 0)
-#define extattr_get_link(path, ns, name, data, size) getxattr(path, name, data, size, 0, XATTR_NOFOLLOW)
 
-#define extattr_set_file(path, ns, name, data, size) setxattr(path, name, data, size, 0, 0)
-#define extattr_set_link(path, ns, name, data, size) setxattr(path, name, data, size, 0, XATTR_NOFOLLOW)
-
-#define extattr_delete_file(path, ns, name)          removexattr(path, name, 0)
-#define extattr_delete_link(path, ns, name)          removexattr(path, name, XATTR_NOFOLLOW)
-
-/* Beware that buf is not formatted in the same way on FreeBSD vs the rest */
-#define extattr_list_file(fd, ns, buf, size) 	     listxattr(fd, (char *) buf, size, 0)
-#define extattr_list_link(fd, ns, buf, size)	     listxattr(fd, (char *) buf, size, XATTR_NOFOLLOW)
-
+#if defined(EXTATTR_NAMESPACE_SYSTEM)
+#define ATTR_NAMESPACE_SYSTEM    EXTATTR_NAMESPACE_SYSTEM
 #else
-/* Linux */
-  
-#define extattr_get_file(path, ns, name, data, size) getxattr(path, name, data, size)
-#define extattr_get_link(path, ns, name, data, size) lgetxattr(path, name, data, size)
-
-#define extattr_set_file(path, ns, name, data, size) setxattr(path, name, data, size, 0)
-#define extattr_set_link(path, ns, name, data, size) lsetxattr(path, name, data, size, 0)
-
-#define extattr_delete_file(path, ns, name)          removexattr(path, name)
-#define extattr_delete_link(path, ns, name)          lremovexattr(path, name)
-
-/* 
- * Beware that the buf is not formatted in the same way on FreeBSD (byte-length+data) vs the rest(NUL-terminated data)
- */
-#define extattr_list_file(fd, ns, buf, size) 	     listxattr(fd, (char *) buf, size)
-#define extattr_list_link(fd, ns, buf, size)	     llistxattr(fd, (char *) buf, size)
-
+#define ATTR_NAMESPACE_SYSTEM    0
 #endif
 
+#if defined(EXTATTR_NAMESPACE_USER)
+#define ATTR_NAMESPACE_USER      EXTATTR_NAMESPACE_USER
 #endif
 
+#define ATTR_FLAG_NOFOLLOW       0x0100
+#define ATTR_FLAG_GETDATA        0x0200
+
+
+extern ssize_t
+attr_get(const char *path,
+	 int ns,
+	 const char *name,
+	 void *data,
+	 size_t size,
+	 int flags);
+
+extern ssize_t
+attr_set(const char *path,
+	 int ns,
+	 const char *name,
+	 const void *data,
+	 size_t size,
+	 int flags);
+
+
+extern ssize_t
+attr_delete(const char *path,
+	    int ns,
+	    const char *name,
+	    int flags);
+
+extern int
+attr_foreach(const char *path,
+	     int ns,
+	     int flags,
+	     int (*handler)(const char *path,
+			    int ns,
+			    const char *name,
+			    int flags,
+			    void *xp),
+	     void *xp);
+
+extern BTREE *
+attr_list(const char *path,
+	  int ns,
+	  int flags);
 
 #endif
