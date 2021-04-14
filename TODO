@@ -10,4 +10,5 @@
 * Support copying of Solaris fsattr (man fgetattr) - similar to file flags
 * Handle Solaris attribute directories (multiple levels of extended attributes)
 * POSIX to NFS4/ZFS-ACLs conversion on the fly
+* Support "file flags" on Linux via ioctl(FS_IOC_FSSETXATTR/FS_IOC_FSGETXATTR)
 * SMB support
