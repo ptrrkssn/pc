@@ -156,7 +156,7 @@ int f_aflag   = 0; /* Check the special UF_ARCHIVE flag and reset it when copyin
 int f_digest  = 0; /* Generate and check a content digest for files */
 size_t f_bufsize = 128*1024;
 
-gid_t gidsetv[NGROUPS_MAX+1];
+gid_t *gidsetv = NULL;
 int gidsetlen = 0;
 
 
@@ -2211,11 +2211,25 @@ main(int argc,
 
   if (geteuid() != 0) {
     int rc;
-    
-    rc = getgroups(NGROUPS_MAX+1, &gidsetv[0]);
+
+    rc = getgroups(0, NULL);
     if (rc < 0) {
       fprintf(stderr, "%s: Error: getgroups: %s\n", argv0, strerror(errno));
       exit(1);
+    }
+
+    if (rc > 0) {
+      gidsetv = calloc(rc+1, sizeof(gidsetv[0]));
+      if (!gidsetv) {
+	fprintf(stderr, "%s: Error: calloc: %s\n", argv0, strerror(errno));
+	exit(1);
+      }
+      
+      rc = getgroups(rc+1, &gidsetv[0]);
+      if (rc < 0) {
+	fprintf(stderr, "%s: Error: getgroups: %s\n", argv0, strerror(errno));
+	exit(1);
+      }
     }
     
     gidsetlen = rc;

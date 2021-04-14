@@ -82,29 +82,38 @@ AC_ARG_WITH([openssl],
 
 
 if test "x$with_zlib" != "xno"; then
+   have_zlib_lib=no
    have_zlib_h=no
-   have_zlib=no
-   AC_CHECK_HEADERS([zlib.h], [have_zlib_h=yes])
-   if test "x$have_zlib_h" = "xyes"; then
-     AC_SEARCH_LIBS([crc32_z], [z], [have_zlib=yes], [
-       AC_SEARCH_LIBS([adler32_z], [z], [have_zlib=yes])])
+   
+   AC_SEARCH_LIBS([crc32_z], [z], [have_zlib=yes], [
+     AC_SEARCH_LIBS([adler32_z], [z], [have_zlib=yes])])
+     
+   if test "x$have_zlib_lib" = "xyes"; then
+     AC_CHECK_HEADERS([zlib.h], [have_zlib_h=yes])
    fi
-   if test "x$have_zlib" = "xyes"; then
+   
+   if test "x$have_zlib_h" = "xyes"; then
      AC_CHECK_FUNCS([adler32_z crc32_z])
    fi
 fi
 
 
 if test "x$with_nettle" != "xno"; then
+   have_nettle_lib=no
    have_nettle_h=no
-   have_nettle=no
-   AC_CHECK_HEADERS([nettle/md5.h nettle/sha2.h nettle/sha3.h], [have_nettle_h=yes])
-   if test "x$have_nettle_h" = "xyes"; then
-     AC_SEARCH_LIBS([nettle_sha3_512_init], [nettle], [have_nettle=yes], [
-       AC_SEARCH_LIBS([nettle_md5_init], [nettle], [have_nettle=yes])])
+   
+   AC_SEARCH_LIBS([nettle_sha3_512_init], [nettle], [have_nettle_lib=yes], [
+     AC_SEARCH_LIBS([nettle_sha512_init], [nettle], [have_nettle_lib=yes], [
+       AC_SEARCH_LIBS([nettle_md5_init], [nettle], [have_nettle_lib=yes])])])
+
+   if test "x$have_nettle_lib" = "xyes"; then
+     AC_CHECK_HEADERS([nettle/md5.h nettle/sha2.h nettle/sha3.h], [have_nettle_h=yes])
    fi
-   if test "x$have_nettle" = "xyes"; then
+   
+   if test "x$have_nettle_h" = "xyes"; then
      AC_CHECK_FUNCS([nettle_sha3_256_init nettle_sha3_512_init])
+     AC_CHECK_FUNCS([nettle_sha256_init nettle_sha512_init])
+     AC_CHECK_FUNCS([nettle_md5_init])
 
      dnl No need for OpenSSL if these are found
      AC_CHECK_FUNCS([nettle_md5_init nettle_sha256_init nettle_sha512_init], [with_openssl=no])
@@ -113,14 +122,17 @@ fi
 
 
 if test "x$with_md" != "xno"; then
+   have_libmd_lib=no
    have_libmd_h=no
-   have_libmd=no
-   AC_CHECK_HEADERS([md5.h skein.h sha256.h sha512.h], [have_libmd_h=yes])
-   if test "x$have_libmd_h" = "xyes"; then
-     AC_SEARCH_LIBS([SHA512_Init], [md], [have_libmd=yes], [
-       AC_SEARCH_LIBS([MD5Init], [md], [have_libmd=yes])])
+   
+   AC_SEARCH_LIBS([SHA512_Init], [md], [have_libmd_lib=yes], [
+     AC_SEARCH_LIBS([MD5Init], [md], [have_libmd_lib=yes])])
+     
+   if test "x$have_libmd_lib" = "xyes"; then
+     AC_CHECK_HEADERS([md5.h skein.h sha256.h sha512.h], [have_libmd_h=yes])
    fi
-   if test "x$have_libmd" = "xyes"; then
+   
+   if test "x$have_libmd_h" = "xyes"; then
      AC_CHECK_FUNCS([MD5Init SKEIN256_Init SKEIN1024_Init])
      
      dnl No need for OpenSSL if these are found
@@ -130,13 +142,21 @@ fi
 
 
 if test "x$with_openssl" != "xno"; then
-   AC_CHECK_HEADERS([openssl/md5.h openssl/sha.h])
-   AC_SEARCH_LIBS([SHA512_Init], [crypto], [], [
-     AC_SEARCH_LIBS([MD5_Init], [crypto])])
-     
-   unset ac_cv_func_SHA256_Init
-   unset ac_cv_func_SHA512_Init
-   AC_CHECK_FUNCS([MD5_Init SHA256_Init SHA512_Init])
+   have_openssl_lib=no
+   have_openssl_h=no
+   
+   AC_SEARCH_LIBS([SHA512_Init], [crypto], [have_openssl_lib=yes], [
+     AC_SEARCH_LIBS([MD5_Init], [crypto], [have_openssl_lib=yes])])
+
+   if test "x$have_openssl_lib" = "xyes"; then
+     AC_CHECK_HEADERS([openssl/md5.h openssl/sha.h], [have_openssl_h=yes])
+   fi
+
+   if test "x$have_openssl_h" = "xyes"; then
+     unset ac_cv_func_SHA256_Init
+     unset ac_cv_func_SHA512_Init
+     AC_CHECK_FUNCS([MD5_Init SHA256_Init SHA512_Init])
+   fi
 fi
 
 AC_OUTPUT([Makefile])
