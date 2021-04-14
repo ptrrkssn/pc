@@ -45,9 +45,9 @@ AC_ARG_WITH([acls],
  AS_HELP_STRING([--without-acls], [Don't build support for ACLs]))
 
 if test "x$with_acls" != "xno"; then
+   AC_SEARCH_LIBS([acl_free], [acl sec])
    AC_CHECK_HEADERS([sys/acl.h])
-   AC_SEARCH_LIBS([acl_free], [acl])
-   AC_CHECK_FUNCS([acl_get_file acl_set_file acl_set_link_np acl_get_link_np acl])
+   AC_CHECK_FUNCS([acl_get_file acl_set_file acl_set_link_np acl_get_link_np acl_get acl_set acl])
 fi
 
 

@@ -3958,18 +3958,6 @@ fi
 
 
 if test "x$with_acls" != "xno"; then
-   for ac_header in sys/acl.h
-do :
-  ac_fn_c_check_header_mongrel "$LINENO" "sys/acl.h" "ac_cv_header_sys_acl_h" "$ac_includes_default"
-if test "x$ac_cv_header_sys_acl_h" = xyes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_SYS_ACL_H 1
-_ACEOF
-
-fi
-
-done
-
    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing acl_free" >&5
 $as_echo_n "checking for library containing acl_free... " >&6; }
 if ${ac_cv_search_acl_free+:} false; then :
@@ -3994,7 +3982,7 @@ return acl_free ();
   return 0;
 }
 _ACEOF
-for ac_lib in '' acl; do
+for ac_lib in '' acl sec; do
   if test -z "$ac_lib"; then
     ac_res="none required"
   else
@@ -4026,7 +4014,19 @@ if test "$ac_res" != no; then :
 
 fi
 
-   for ac_func in acl_get_file acl_set_file acl_set_link_np acl_get_link_np acl
+   for ac_header in sys/acl.h
+do :
+  ac_fn_c_check_header_mongrel "$LINENO" "sys/acl.h" "ac_cv_header_sys_acl_h" "$ac_includes_default"
+if test "x$ac_cv_header_sys_acl_h" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_SYS_ACL_H 1
+_ACEOF
+
+fi
+
+done
+
+   for ac_func in acl_get_file acl_set_file acl_set_link_np acl_get_link_np acl_get acl_set acl
 do :
   as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
 ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"

@@ -3,11 +3,17 @@
 /* Define to 1 if you have the `acl' function. */
 #undef HAVE_ACL
 
+/* Define to 1 if you have the `acl_get' function. */
+#undef HAVE_ACL_GET
+
 /* Define to 1 if you have the `acl_get_file' function. */
 #undef HAVE_ACL_GET_FILE
 
 /* Define to 1 if you have the `acl_get_link_np' function. */
 #undef HAVE_ACL_GET_LINK_NP
+
+/* Define to 1 if you have the `acl_set' function. */
+#undef HAVE_ACL_SET
 
 /* Define to 1 if you have the `acl_set_file' function. */
 #undef HAVE_ACL_SET_FILE
