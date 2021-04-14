@@ -42,6 +42,7 @@
 # define acl_free sunacl_free
 #endif
 
+#include <sys/types.h>
 #include <sys/acl.h>
 
 #if defined(HAVE_ACL)
