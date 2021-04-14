@@ -2,9 +2,12 @@
 * Create a manual page
 * Better documentation
 * Smarter/more efficient comparision of ACLs
-* Handle NFSv4 ACLs on Linux
+* Handle NFSv4 ACLs on Linux more direct
+* Use threads to run copies in parallel
 * Add a remote mode
 * Expand the test suite
 * Support io_uring on Linux
 * Support copying of Solaris fsattr (man fgetattr) - similar to file flags
 * Handle Solaris attribute directories (multiple levels of extended attributes)
+* POSIX to NFS4/ZFS-ACLs conversion on the fly
+* SMB support
