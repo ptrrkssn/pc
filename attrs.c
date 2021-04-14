@@ -74,9 +74,9 @@ attr_get(const char *path,
 	 size_t size,
 	 int flags) {
   if (flags & ATTR_FLAG_NOFOLLOW)
-    return lgetxattr(path, name, data, size, 0, flags);
+    return lgetxattr(path, name, data, size);
   else
-    return getxattr(path, name, data, size, 0, flags);
+    return getxattr(path, name, data, size);
 }
 
 ssize_t
@@ -87,9 +87,9 @@ attr_set(const char *path,
 	 size_t size,
 	 int flags) {
   if (flags & ATTR_FLAG_NOFOLLOW)
-    return lsetxattr(path, name, data, size, 0, flags);
+    return lsetxattr(path, name, data, size, 0);
   else
-    return getxattr(path, name, data, size, 0, flags);
+    return setxattr(path, name, data, size, 0);
 }
 
 
@@ -99,9 +99,9 @@ attr_delete(const char *path,
 	    const char *name,
 	    int flags) {
   if (flags & ATTR_FLAG_NOFOLLOW)
-    return lremovexattr(path, name, flags);
+    return lremovexattr(path, name);
   else
-    return removexattr(path, name, flags);
+    return removexattr(path, name);
 }
 
 
