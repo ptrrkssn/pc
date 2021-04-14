@@ -49,6 +49,7 @@ AC_ARG_WITH([acls],
 if test "x$with_acls" != "xno"; then
 dnl   Solaris acl stuff we don't currently use
 dnl   AC_SEARCH_LIBS([acl_get], [sec])
+   AC_SEARCH_LIBS([acl_get_file], [acl])
    AC_CHECK_HEADERS([sys/acl.h])
    AC_CHECK_FUNCS([acl_get_file acl_set_file acl_set_link_np acl_get_link_np acl])
 fi
