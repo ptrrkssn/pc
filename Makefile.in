@@ -31,11 +31,12 @@ OBJS = pc.o attrs.o btree.o digest.o misc.o
 all: pc
 
 
-pc.o: pc.c digest.h btree.h config.h Makefile
+pc.o: pc.c digest.h attrs.h btree.h config.h Makefile
 attrs.o: attrs.c attrs.h btree.h config.h Makefile
 digest.o: digest.c digest.h config.h Makefile
 btree.o: btree.c btree.h config.h Makefile
 misc.o: misc.c misc.h config.h Makefile
+
 
 pc: $(OBJS)
 	$(CC) -o pc $(OBJS) $(LIBS)
@@ -66,25 +67,60 @@ push:	distclean
 	git add -A && git commit -a && git push
 
 tests-clean:
-	rm -fr t && mkdir t && cd t && mkdir -p a/ad b/bd && touch a/af b/bf
+	rm -fr t && mkdir t && cd t && mkdir -p a/ad b/bd && touch a/af a/xf b/bf b/xf
 
-tests:	tests-clean test-0 test-1 # test-2 test-3 test-4 test-5
+tests-setup: tests-clean
+	$(MAKE) tests-setup-`uname -s`
+
+tests-setup-FreeBSD:
+	setextattr user test-a test-a-val t/a/af
+	setextattr user test-b test-b-val t/b/bf
+	setextattr user test-a test-a-val t/a/xf
+	setextattr user test-x test-a-val t/a/xf
+	setextattr user test-x test-b-val t/b/xf
+	setextattr user test-b test-b-val t/b/xf
+
+tests-setup-Darwin:
+	xattr -w test-a test-a-val t/a/af
+	xattr -w test-b test-b-val t/b/bf
+	xattr -w test-a test-a-val t/a/xf
+	xattr -w test-x test-a-val t/a/xf
+	xattr -w test-x test-b-val t/b/xf
+	xattr -w test-b test-b-val t/b/xf
+
+tests-setup-Linux:
+	@echo To be done...
+
+tests-setup-SunOS:
+	echo "test-a-val" >/tmp/test-a-val
+	echo "test-x-val" >/tmp/test-b-val
+	runat t/a/af cp /tmp/test-a-val test-a
+	runat t/b/bf cp /tmp/test-b-val test-b
+	runat t/a/xf cp /tmp/test-a-val test-a 
+	runat t/a/xf cp /tmp/test-a-val test-x
+	runat t/b/xf cp /tmp/test-b-val test-x 
+	runat t/b/xf cp /tmp/test-b-val test-b
+
+tests:	tests-setup test-0 test-1 test-2 test-3 test-4 test-5 test-6
 
 test-0: pc
 	./pc -h
 
 test-1: pc
-	@(echo "Test 1 ------------------------" ; cd t && ../pc -vd a/ b && ls -lR b)
+	@(echo "";echo "Test 1 ------------------------" ; cd t && ../pc -v a/ b && ls -lR b)
 
 test-2: pc
-	@(echo "Test 2 ------------------------" ; cd t && ../pc -vr a/ b && ls -lR b)
+	@(echo "";echo "Test 2 ------------------------" ; cd t && ../pc -vr a/ b && ls -lR b)
 
 test-3: pc
-	@(echo "Test 3 ------------------------" ; cd t && ../pc -va a/ b && ls -lR b)
+	@(echo "";echo "Test 3 ------------------------" ; cd t && ../pc -va a/ b && ls -lR b)
 
 test-4: pc
-	@(echo "Test 4 ------------------------" ; cd t && ../pc -vM a/ b && ls -lR b)
+	@(echo "";echo "Test 4 ------------------------" ; cd t && ../pc -vM a/ b && ls -lR b)
 
 test-5: pc
-	@(echo "Test 5 ------------------------" ; cd t && ../pc -fvM a/ b && ls -lR b)
+	@(echo "";echo "Test 5 ------------------------" ; cd t && ../pc -fvM a/ b && ls -lR b)
+
+test-6: pc
+	@(echo "";echo "Test 6 ------------------------" ; cd t && ../pc -vM a/ b && ls -lR b)
 

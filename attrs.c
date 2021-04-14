@@ -268,10 +268,14 @@ attr_set(const char *path,
 	 const void *data,
 	 size_t size,
 	 int flags) {
+  int rc;
+  
   if (flags & ATTR_FLAG_NOFOLLOW)
-    return extattr_set_link(path, ns, name, data, size);
+    rc = extattr_set_link(path, ns, name, data, size);
   else
-    return extattr_set_file(path, ns, name, data, size);
+    rc = extattr_set_file(path, ns, name, data, size);
+
+  return rc;
 }
 
 

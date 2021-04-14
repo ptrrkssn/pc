@@ -49,18 +49,17 @@ typedef struct attr {
 } ATTR;
 
 
-#if defined(EXTATTR_NAMESPACE_SYSTEM)
+
+#if defined(HAVE_EXTATTR_GET_LINK)
+#define ATTR_NAMESPACE_USER      EXTATTR_NAMESPACE_USER
 #define ATTR_NAMESPACE_SYSTEM    EXTATTR_NAMESPACE_SYSTEM
 #else
-#define ATTR_NAMESPACE_SYSTEM    0
+#define ATTR_NAMESPACE_USER      1
 #endif
 
-#if defined(EXTATTR_NAMESPACE_USER)
-#define ATTR_NAMESPACE_USER      EXTATTR_NAMESPACE_USER
-#endif
 
-#define ATTR_FLAG_NOFOLLOW       0x0100
-#define ATTR_FLAG_GETDATA        0x0200
+#define ATTR_FLAG_NOFOLLOW       0x0001
+#define ATTR_FLAG_GETDATA        0x0002
 
 
 extern ssize_t

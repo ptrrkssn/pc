@@ -91,11 +91,11 @@ typedef struct node {
 #endif
   } a;
   struct {
-#if defined(ATTR_NAMESPACE_SYSTEM)
-    BTREE *sys;		/* System Extended Attributes */
-#endif
 #if defined(ATTR_NAMESPACE_USER)
     BTREE *usr;		/* User Extended Attributes */
+#endif
+#if defined(ATTR_NAMESPACE_SYSTEM)
+    BTREE *sys;		/* System Extended Attributes */
 #endif
   } x;
   struct {		/* Content Digest */
@@ -531,31 +531,11 @@ node_update(NODE *src_nip,
 
     aub.pn = dstpath;
     
-#if defined(ATTR_NAMESPACE_SYSTEM)
-    if (src_nip->x.sys) {
-      aub.ns = ATTR_NAMESPACE_SYSTEM;
-      aub.attrs = dst_nip ? dst_nip->x.sys : NULL;
-      xrc = btree_foreach(src_nip->x.sys, attr_update, &aub);
-      if (xrc < 0) {
-        if (!f_ignore)
-          return xrc;
-        rc = xrc;
-      }
-    }
-    if (/* f_remove && */ dst_nip && dst_nip->x.sys) {
-      aub.attrs = src_nip ? src_nip->x.sys : NULL;
-      xrc = btree_foreach(dst_nip->x.sys, attr_remove, &aub);
-      if (xrc < 0) {
-	if (!f_ignore)
-	  return xrc;
-	rc = xrc;
-      }
-    }
-#endif
 #if defined(ATTR_NAMESPACE_USER)
     if (src_nip->x.usr) {
       aub.ns = ATTR_NAMESPACE_USER;
       aub.attrs = dst_nip ? dst_nip->x.usr : NULL;
+      
       xrc = btree_foreach(src_nip->x.usr, attr_update, &aub);
       if (xrc < 0) {
         if (!f_ignore)
@@ -564,8 +544,34 @@ node_update(NODE *src_nip,
       }
     }
     if (/* f_remove && */ dst_nip && dst_nip->x.usr) {
+      aub.ns = ATTR_NAMESPACE_USER;
       aub.attrs = src_nip ? src_nip->x.usr : NULL;
+      
       xrc = btree_foreach(dst_nip->x.usr, attr_remove, &aub);
+      if (xrc < 0) {
+	if (!f_ignore)
+	  return xrc;
+	rc = xrc;
+      }
+    }
+#endif
+#if defined(ATTR_NAMESPACE_SYSTEM)
+    if (src_nip->x.sys) {
+      aub.ns = ATTR_NAMESPACE_SYSTEM;
+      aub.attrs = dst_nip ? dst_nip->x.sys : NULL;
+      
+      xrc = btree_foreach(src_nip->x.sys, attr_update, &aub);
+      if (xrc < 0) {
+        if (!f_ignore)
+          return xrc;
+        rc = xrc;
+      }
+    }
+    if (/* f_remove && */ dst_nip && dst_nip->x.sys) {
+      aub.ns = ATTR_NAMESPACE_SYSTEM;
+      aub.attrs = src_nip ? src_nip->x.sys : NULL;
+      
+      xrc = btree_foreach(dst_nip->x.sys, attr_remove, &aub);
       if (xrc < 0) {
 	if (!f_ignore)
 	  return xrc;
@@ -771,108 +777,6 @@ node_update(NODE *src_nip,
 }
 
 
-#if 0
-/*
- * Get all Extended Attributes from a node
- */
-BTREE *
-attrs_get(const char *objpath,
-	  int is_link,
-	  int attrnamespace) {
-  ssize_t avsize;
-  unsigned char *alist, *end, *ap;
-  size_t len;
-  BTREE *bp;
-
-  if (is_link)
-    avsize = extattr_list_link(objpath, attrnamespace, NULL, 0);
-  else
-    avsize = extattr_list_file(objpath, attrnamespace, NULL, 0);
-  if (avsize < 0) {
-    return NULL;
-  }
-  
-  alist = malloc(avsize);
-  if (!alist) {
-    fprintf(stderr, "%s: Error: %s: malloc(%ld): %s\n",
-	    argv0, objpath, avsize, strerror(errno));
-    exit(1);
-  }
-
-  if (is_link)
-    avsize = extattr_list_link(objpath, attrnamespace, alist, avsize);
-  else
-    avsize = extattr_list_file(objpath, attrnamespace, alist, avsize);
-  
-  if (avsize < 0) {
-    fprintf(stderr, "%s: Error: %s: extattr_list_file: %s\n",
-	    argv0, objpath, strerror(errno));
-    exit(1);
-  }
-
-  bp = btree_create(NULL, NULL);
-  end = alist+avsize;
-  ap = alist;
-  
-  while (ap < end) {
-    char *an;
-    ATTR *ad;
-    ssize_t adsize;
-
-#if defined(__FreeBSD__)
-    len = *ap++; /* 1 byte = length */
-#else
-    len = strlen((char *) ap); /* NUL-terminated strings */
-#endif
-    an = malloc(len+1);
-    if (!an) {
-      fprintf(stderr, "%s: Error: %s: malloc(%ld): %s\n",
-	      argv0, objpath, len, strerror(errno));
-      exit(1);
-    }
-    memcpy(an, ap, len);
-    an[len] = '\0';
-    ap += len;
-#if !defined(__FreeBSD__)
-    ++ap;
-#endif
-
-    if (is_link)
-      adsize = extattr_get_link(objpath, attrnamespace, an, NULL, 0);
-    else
-      adsize = extattr_get_file(objpath, attrnamespace, an, NULL, 0);
-    
-    if (adsize < 0) {
-      fprintf(stderr, "%s: Error: %s: extattr_get_file(%s): %s\n",
-	      argv0, objpath, an, strerror(errno));
-      exit(1);
-    }
-    
-    ad = malloc(sizeof(ATTR) + adsize);
-    if (!ad) {
-      fprintf(stderr, "%s: Error: %s: malloc(%ld): %s\n",
-	      argv0, objpath, sizeof(ATTR)+adsize, strerror(errno));
-      exit(1);
-    }
-
-    adsize = attr_get(objpath, attrnamespace, an, ad->buf, adsize,
-		      is_link ? ATTR_FLAG_NOFOLLOW : 0);
-    
-    if (adsize < 0) {
-      fprintf(stderr, "%s: Error: %s: attr_get(%s): %s\n",
-	      argv0, objpath, an, strerror(errno));
-      exit(1);
-    }
-
-    ad->len = adsize;
-    btree_insert(bp, an, (void *) ad);
-  }
-
-  return bp;
-}
-#endif
-
-
 /*
  * Allocate an empty node
  */
@@ -927,16 +831,16 @@ node_free(void *vp) {
   }
 #endif
 
-#if defined(ATTR_NAMESPACE_SYSTEM)
-  if (nip->x.sys) {
-    btree_destroy(nip->x.sys);
-    nip->x.sys = NULL;
-  }
-#endif
 #if defined(ATTR_NAMESPACE_USER)
   if (nip->x.usr) {
     btree_destroy(nip->x.usr);
     nip->x.usr = NULL;
+  }
+#endif
+#if defined(ATTR_NAMESPACE_SYSTEM)
+  if (nip->x.sys) {
+    btree_destroy(nip->x.sys);
+    nip->x.sys = NULL;
   }
 #endif
   
@@ -990,17 +894,16 @@ node_get(NODE *nip,
   }
 #endif
 
-#if defined(ATTR_NAMESPACE_SYSTEM)
-  if (nip->x.sys) {
-    btree_destroy(nip->x.sys);
-    nip->x.sys = NULL;
-  }
-#endif
-  
 #if defined(ATTR_NAMESPACE_USER)
   if (nip->x.usr) {
     btree_destroy(nip->x.usr);
     nip->x.usr = NULL;
+  }
+#endif
+#if defined(ATTR_NAMESPACE_SYSTEM)
+  if (nip->x.sys) {
+    btree_destroy(nip->x.sys);
+    nip->x.sys = NULL;
   }
 #endif
   
@@ -1056,12 +959,12 @@ node_get(NODE *nip,
   }
   
   if (f_attrs) {
-#if defined(ATTR_NAMESPACE_SYSTEM)
-    nip->x.sys = attr_list(nip->p, ATTR_NAMESPACE_SYSTEM,
+#if defined(ATTR_NAMESPACE_USER)
+    nip->x.usr = attr_list(nip->p, ATTR_NAMESPACE_USER,
 			   ATTR_FLAG_GETDATA | (S_ISLNK(nip->s.st_mode) ? ATTR_FLAG_NOFOLLOW : 0));
 #endif
-#if defined(ATTR_NAMESPACE_USER)
-    nip->x.sys = attr_list(nip->p, ATTR_NAMESPACE_USER,
+#if defined(ATTR_NAMESPACE_SYSTEM)
+    nip->x.sys = attr_list(nip->p, ATTR_NAMESPACE_SYSTEM,
 			   ATTR_FLAG_GETDATA | (S_ISLNK(nip->s.st_mode) ? ATTR_FLAG_NOFOLLOW : 0));
 #endif
   }
@@ -1345,13 +1248,13 @@ node_print(const char *key,
   if (nip->a.def)
     putchar('D');
 #endif
-#if defined(ATTR_NAMESPACE_SYSTEM)
-  if (nip->x.sys && btree_entries(nip->x.sys) > 0)
-    putchar('S');
-#endif
 #if defined(ATTR_NAMESPACE_USER)
   if (nip->x.usr && btree_entries(nip->x.usr) > 0)
     putchar('U');
+#endif
+#if defined(ATTR_NAMESPACE_SYSTEM)
+  if (nip->x.sys && btree_entries(nip->x.sys) > 0)
+    putchar('S');
 #endif
 
   putchar(']');
@@ -1402,16 +1305,16 @@ node_print(const char *key,
       acl_free(t);
     }
 #endif
-#if defined(ATTR_NAMESPACE_SYSTEM)
-    if (nip->x.sys && btree_entries(nip->x.sys) > 0) {
-      puts("    System Attributes:");
-      btree_foreach(nip->x.sys, attr_print, NULL);
-    }
-#endif
 #if defined(ATTR_NAMESPACE_USER)
     if (nip->x.usr && btree_entries(nip->x.usr) > 0) {
       puts("    User Attributes:");
       btree_foreach(nip->x.usr, attr_print, NULL);
+    }
+#endif
+#if defined(ATTR_NAMESPACE_SYSTEM)
+    if (nip->x.sys && btree_entries(nip->x.sys) > 0) {
+      puts("    System Attributes:");
+      btree_foreach(nip->x.sys, attr_print, NULL);
     }
 #endif
     if (nip->d.len) {
@@ -1612,13 +1515,13 @@ node_compare(NODE *a,
   }
 
   if (f_attrs) {
-#if defined(ATTR_NAMESPACE_SYSTEM)
     /* Check Extended Attributes */
-    if (a->x.sys && attrs_compare(a->x.sys, b->x.sys))
-      d |= 0x01000000;
-#endif
 #if defined(ATTR_NAMESPACE_USER)
     if (a->x.usr && attrs_compare(a->x.usr, b->x.usr))
+      d |= 0x01000000;
+#endif
+#if defined(ATTR_NAMESPACE_SYSTEM)
+    if (a->x.sys && attrs_compare(a->x.sys, b->x.sys))
       d |= 0x02000000;
 #endif
   }
