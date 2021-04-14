@@ -65,6 +65,9 @@ typedef int acl_type_t;
 #define ACL_TYPE_POSIX   1
 #define ACL_TYPE_NFS4    4
 
+#define ACL_TYPE_ACCESS  ACL_TYPE_POSIX
+
+
 typedef union gace {
   aclent_t posix;
   ace_t    nfs;

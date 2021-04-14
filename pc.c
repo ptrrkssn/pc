@@ -892,7 +892,7 @@ node_get(NODE *nip,
 #if defined(ACL_TYPE_ACCESS)
       nip->a.acc = acl_get_link_np(nip->p, ACL_TYPE_ACCESS);
 #endif
-#if defined(ACL_TYPE_ACCESS)
+#if defined(ACL_TYPE_DEFAULT)
       nip->a.def = acl_get_link_np(nip->p, ACL_TYPE_DEFAULT);
 #endif
 #else
@@ -1053,6 +1053,8 @@ dirnode_add(DIRNODE *dnp,
   } else {
     NODE *nip = node_alloc();
 
+    fprintf(stderr, "node_get(%s)\n", path);
+    
     rc = node_get(nip, path);
     if (rc < 0) {
       if (f_debug)
@@ -1195,7 +1197,7 @@ node_print(const char *key,
 #endif
 #if defined(ACL_TYPE_ACCESS)
   if (nip->a.acc)
-    putchar('A');
+    putchar('P');
 #endif
 #if defined(ACL_TYPE_DEFAULT)
   if (nip->a.def)
@@ -1242,7 +1244,7 @@ node_print(const char *key,
 #endif
 #if defined(ACL_TYPE_ACCESS)
     if (nip->a.acc) {
-      puts("    POSIX Access ACL:");
+      puts("    POSIX ACL:");
       char *t = acl_to_text(nip->a.acc, NULL);
       if (t)
 	fputs(t, stdout);
@@ -2396,16 +2398,19 @@ main(int argc,
   src = dirnode_alloc(NULL);
   for (j = i; j < argc-1; j++) {
     rc = dirnode_add(src, argv[j], 0);
-    if (rc < 0)
+    if (rc < 0) {
+      fprintf(stderr, "%s: Error: %s: %s\n", argv0, argv[j], strerror(errno));
       exit(1);
+    }
   }
   
   dst = dirnode_alloc(argv[argc-1]);
-  
   /* XXX - Handle dst being non-dir */
   rc = dirnode_add(dst, argv[argc-1], 1);
-  if (rc < 0)
+  if (rc < 0) {
+    fprintf(stderr, "%s: Error: %s: %s\n", argv0, argv[j], strerror(errno));
     exit(1);
+  }
   
   return dirnode_compare(src, dst);
 }
