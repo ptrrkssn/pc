@@ -58,18 +58,11 @@
 #include <sys/vnode.h>
 #endif
 
-#if defined(HAVE_SYS_ACL_H)
-#include <sys/acl.h>
-#if defined(__APPLE__)
-/* MacOS Extended is very similar to ZFS/NFS4 */
-#define ACL_TYPE_NFS4 ACL_TYPE_EXTENDED
-#endif
-#endif
-
-#include "btree.h"
-#include "digest.h"
+#include "acls.h"
 #include "attrs.h"
 #include "misc.h"
+#include "btree.h"
+#include "digest.h"
 
 
 /* 

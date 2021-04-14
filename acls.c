@@ -1,5 +1,5 @@
 /*
- * attrs.h
+ * acls.c
  * 
  * Copyright (c) 2021, Peter Eriksson <pen@lysator.liu.se>
  *
@@ -31,76 +31,80 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef ATTRS_H
-#define ATTRS_H 1
+#include "config.h"
 
-#include "btree.h"
+#include <stdlib.h>
 
-#if HAVE_SYS_EXTATTR_H
-#include <sys/extattr.h>
+#include "acls.h"
+
+
+#if defined(HAVE_ACE)
+
+acl_t
+acl_init(int count) {
+  acl_t ap;
+
+
+  ap = malloc(sizeof(acl_t)+count*sizeof(GACE));
+  if (!ap)
+    return NULL;
+
+  ap->type = ACL_TYPE_NONE;
+  ap->sev = count;
+  ap->nev = 0;
+}
+
+
+void
+acl_free(void *vp) {
+  free(vp);
+}
+
+
+acl_t
+acl_get_file(const char *path,
+	     acl_type_t type) {
+  acl_t ap;
+  int ne;
+
+  switch (type) {
+  case ACL_TYPE_POSIX:
+    ne = acl(path, GETACLCNT, 0, NULL);
+    break;
+  case ACL_TYPE_NFS4:
+    ne = acl(path, ACE_GETACLCNT, 0, NULL);
+    break;
+  default:
+    ne = acl(path, ACE_GETACLCNT, 0, NULL);
+    if (ne < 0) {
+      ne = acl(path, GETACLCNT, 0, NULL);
+      type = ACL_TYPE_POSIX;
+    } else
+      type = ACL_TYPE_NFS4;
+  }
+  if (ne < 0)
+    return NULL;
+  
+  ap = acl_init(ne);
+  if (!ap)
+    return NULL;
+  
+  switch (type) {
+  case ACL_TYPE_POSIX:
+    ne = acl(path, GETACL, ap->sev, ap->ev);
+    break;
+  case ACL_TYPE_NFS4:
+    ne = acl(path, ACE_GETACL, ap->sev, ap->ev);
+    break;
+  }
+  if (ne < 0) {
+    acl_free(ap);
+    return NULL;
+  }
+
+  ap->nev = ne;
+  return ap;
+}
+
 #endif
 
-#if HAVE_SYS_XATTR_H
-#include <sys/xattr.h>
-#endif
-
-
-typedef struct attr {
-  size_t len;
-  unsigned char buf[];
-} ATTR;
-
-
-
-#if defined(HAVE_EXTATTR_GET_LINK)
-#define ATTR_NAMESPACE_USER      EXTATTR_NAMESPACE_USER
-#define ATTR_NAMESPACE_SYSTEM    EXTATTR_NAMESPACE_SYSTEM
-#else
-#define ATTR_NAMESPACE_USER      1
-#endif
-
-
-#define ATTR_FLAG_NOFOLLOW       0x0001
-#define ATTR_FLAG_GETDATA        0x0002
-
-
-extern ssize_t
-attr_get(const char *path,
-	 int ns,
-	 const char *name,
-	 void *data,
-	 size_t size,
-	 int flags);
-
-extern ssize_t
-attr_set(const char *path,
-	 int ns,
-	 const char *name,
-	 const void *data,
-	 size_t size,
-	 int flags);
-
-
-extern ssize_t
-attr_delete(const char *path,
-	    int ns,
-	    const char *name,
-	    int flags);
-
-extern int
-attr_foreach(const char *path,
-	     int ns,
-	     int flags,
-	     int (*handler)(const char *path,
-			    int ns,
-			    const char *name,
-			    int flags,
-			    void *xp),
-	     void *xp);
-
-extern BTREE *
-attr_list(const char *path,
-	  int ns,
-	  int flags);
-
-#endif

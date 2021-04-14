@@ -1,5 +1,5 @@
 /*
- * attrs.h
+ * acls.h
  * 
  * Copyright (c) 2021, Peter Eriksson <pen@lysator.liu.se>
  *
@@ -31,76 +31,52 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef ATTRS_H
-#define ATTRS_H 1
+#ifndef ACLS_H
+#define ACLS_H 1
 
-#include "btree.h"
+#if defined(HAVE_SYS_ACL_H)
 
-#if HAVE_SYS_EXTATTR_H
-#include <sys/extattr.h>
+#if defined(HAVE_ACL)
+# define acl_t sunacl_t
 #endif
 
-#if HAVE_SYS_XATTR_H
-#include <sys/xattr.h>
+#include <sys/acl.h>
+
+#if defined(HAVE_ACL)
+# undef acl_t
 #endif
 
-
-typedef struct attr {
-  size_t len;
-  unsigned char buf[];
-} ATTR;
-
-
-
-#if defined(HAVE_EXTATTR_GET_LINK)
-#define ATTR_NAMESPACE_USER      EXTATTR_NAMESPACE_USER
-#define ATTR_NAMESPACE_SYSTEM    EXTATTR_NAMESPACE_SYSTEM
-#else
-#define ATTR_NAMESPACE_USER      1
+#if defined(__APPLE__)
+/* MacOS Extended is very similar to ZFS/NFS4 */
+#define ACL_TYPE_NFS4 ACL_TYPE_EXTENDED
 #endif
 
+#if defined(HAVE_ACL)
+typedef int acl_type_t;
 
-#define ATTR_FLAG_NOFOLLOW       0x0001
-#define ATTR_FLAG_GETDATA        0x0002
+#define ACL_TYPE_NONE    0
+#define ACL_TYPE_POSIX   1
+#define ACL_TYPE_NFS4    4
 
+typedef union gace {
+  aclent_t posix;
+  ace_t    nfs;
+} GACE;
 
-extern ssize_t
-attr_get(const char *path,
-	 int ns,
-	 const char *name,
-	 void *data,
-	 size_t size,
-	 int flags);
+typedef struct gacl_info {
+  acl_type_t type;
+  int nev;
+  int sev;
+  GACE ev[];
+} *acl_t;
 
-extern ssize_t
-attr_set(const char *path,
-	 int ns,
-	 const char *name,
-	 const void *data,
-	 size_t size,
-	 int flags);
+extern acl_t
+acl_init(int count);
 
+extern void
+acl_free(void *vp);
 
-extern ssize_t
-attr_delete(const char *path,
-	    int ns,
-	    const char *name,
-	    int flags);
-
-extern int
-attr_foreach(const char *path,
-	     int ns,
-	     int flags,
-	     int (*handler)(const char *path,
-			    int ns,
-			    const char *name,
-			    int flags,
-			    void *xp),
-	     void *xp);
-
-extern BTREE *
-attr_list(const char *path,
-	  int ns,
-	  int flags);
+#endif
+#endif
 
 #endif

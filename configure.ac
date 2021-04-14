@@ -1,7 +1,7 @@
 dnl configure.ac for pc
 
 AC_PREREQ([2.69])
-AC_INIT([pc], [0.4], [pen@lysator.liu.se], [pc], [https://github.com/ptrrkssn/pc])
+AC_INIT([pc], [0.5], [pen@lysator.liu.se], [pc], [https://github.com/ptrrkssn/pc])
 
 AC_CONFIG_SRCDIR([pc.c])
 AC_CONFIG_HEADERS([config.h])

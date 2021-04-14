@@ -328,6 +328,24 @@ time2str(time_t t,
 }
 
 
+char *
+timespec2str(struct timespec *tp,
+	    char *buf,
+	    size_t bufsize,
+	    int abs_f) {
+  if (time2str(tp->tv_sec, buf, bufsize, abs_f) == NULL)
+    return NULL;
+
+  while (*buf && bufsize > 0) {
+    ++buf;
+    --bufsize;
+  }
+
+  snprintf(buf, bufsize, "+%u", (unsigned int) (tp->tv_nsec/1000000));
+  return buf;
+}
+
+
 /*
  * Compare two timespec structures
  * Returns: -1 if a < b, 1 if a > b, and 0 if equal
