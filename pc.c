@@ -91,10 +91,10 @@ typedef struct node {
 #endif
   } a;
   struct {
-#if defined(EXTATTR_NAMESPACE_SYSTEM)
+#if defined(ATTR_NAMESPACE_SYSTEM)
     BTREE *sys;		/* System Extended Attributes */
 #endif
-#if defined(EXTATTR_NAMESPACE_USER)
+#if defined(ATTR_NAMESPACE_USER)
     BTREE *usr;		/* User Extended Attributes */
 #endif
   } x;
@@ -531,9 +531,9 @@ node_update(NODE *src_nip,
 
     aub.pn = dstpath;
     
-#if defined(EXTATTR_NAMESPACE_SYSTEM)
+#if defined(ATTR_NAMESPACE_SYSTEM)
     if (src_nip->x.sys) {
-      aub.ns = EXTATTR_NAMESPACE_SYSTEM;
+      aub.ns = ATTR_NAMESPACE_SYSTEM;
       aub.attrs = dst_nip ? dst_nip->x.sys : NULL;
       xrc = btree_foreach(src_nip->x.sys, attr_update, &aub);
       if (xrc < 0) {
@@ -541,20 +541,20 @@ node_update(NODE *src_nip,
           return xrc;
         rc = xrc;
       }
-      if (f_remove && dst_nip && dst_nip->x.sys) {
-	aub.attrs = src_nip->x.sys;
-	xrc = btree_foreach(dst_nip->x.sys, attr_remove, &aub);
-        if (xrc < 0) {
-          if (!f_ignore)
-            return xrc;
-          rc = xrc;
-        }
+    }
+    if (/* f_remove && */ dst_nip && dst_nip->x.sys) {
+      aub.attrs = src_nip ? src_nip->x.sys : NULL;
+      xrc = btree_foreach(dst_nip->x.sys, attr_remove, &aub);
+      if (xrc < 0) {
+	if (!f_ignore)
+	  return xrc;
+	rc = xrc;
       }
     }
 #endif
-#if defined(EXTATTR_NAMESPACE_USER)
+#if defined(ATTR_NAMESPACE_USER)
     if (src_nip->x.usr) {
-      aub.ns = EXTATTR_NAMESPACE_USER;
+      aub.ns = ATTR_NAMESPACE_USER;
       aub.attrs = dst_nip ? dst_nip->x.usr : NULL;
       xrc = btree_foreach(src_nip->x.usr, attr_update, &aub);
       if (xrc < 0) {
@@ -562,14 +562,14 @@ node_update(NODE *src_nip,
           return xrc;
         rc = xrc;
       }
-      if (f_remove && dst_nip && dst_nip->x.usr) {
-	aub.attrs = src_nip->x.usr;
-	xrc = btree_foreach(dst_nip->x.usr, attr_remove, &aub);
-        if (xrc < 0) {
-          if (!f_ignore)
-            return xrc;
-          rc = xrc;
-        }
+    }
+    if (/* f_remove && */ dst_nip && dst_nip->x.usr) {
+      aub.attrs = src_nip ? src_nip->x.usr : NULL;
+      xrc = btree_foreach(dst_nip->x.usr, attr_remove, &aub);
+      if (xrc < 0) {
+	if (!f_ignore)
+	  return xrc;
+	rc = xrc;
       }
     }
 #endif
@@ -771,7 +771,7 @@ node_update(NODE *src_nip,
 }
 
 
-
+#if 0
 /*
  * Get all Extended Attributes from a node
  */
@@ -870,6 +870,7 @@ attrs_get(const char *objpath,
 
   return bp;
 }
+#endif
 
 
 /*
@@ -926,13 +927,13 @@ node_free(void *vp) {
   }
 #endif
 
-#if defined(EXTATTR_NAMESPACE_SYSTEM)
+#if defined(ATTR_NAMESPACE_SYSTEM)
   if (nip->x.sys) {
     btree_destroy(nip->x.sys);
     nip->x.sys = NULL;
   }
 #endif
-#if defined(EXTATTR_NAMESPACE_USER)
+#if defined(ATTR_NAMESPACE_USER)
   if (nip->x.usr) {
     btree_destroy(nip->x.usr);
     nip->x.usr = NULL;
@@ -989,14 +990,14 @@ node_get(NODE *nip,
   }
 #endif
 
-#if defined(EXTATTR_NAMESPACE_SYSTEM)
+#if defined(ATTR_NAMESPACE_SYSTEM)
   if (nip->x.sys) {
     btree_destroy(nip->x.sys);
     nip->x.sys = NULL;
   }
 #endif
   
-#if defined(EXTATTR_NAMESPACE_USER)
+#if defined(ATTR_NAMESPACE_USER)
   if (nip->x.usr) {
     btree_destroy(nip->x.usr);
     nip->x.usr = NULL;
@@ -1055,13 +1056,13 @@ node_get(NODE *nip,
   }
   
   if (f_attrs) {
-#if defined(EXTATTR_NAMESPACE_SYSTEM)
-    nip->x.sys = attr_list(nip->p, EXTATTR_NAMESPACE_SYSTEM,
-			   S_ISLNK(nip->s.st_mode) ? ATTR_FLAG_NOFOLLOW : 0);
+#if defined(ATTR_NAMESPACE_SYSTEM)
+    nip->x.sys = attr_list(nip->p, ATTR_NAMESPACE_SYSTEM,
+			   ATTR_FLAG_GETDATA | (S_ISLNK(nip->s.st_mode) ? ATTR_FLAG_NOFOLLOW : 0));
 #endif
-#if defined(EXTATTR_NAMESPACE_USER)
-    nip->x.sys = attr_list(nip->p, EXTATTR_NAMESPACE_USER,
-			   S_ISLNK(nip->s.st_mode) ? ATTR_FLAG_NOFOLLOW : 0);
+#if defined(ATTR_NAMESPACE_USER)
+    nip->x.sys = attr_list(nip->p, ATTR_NAMESPACE_USER,
+			   ATTR_FLAG_GETDATA | (S_ISLNK(nip->s.st_mode) ? ATTR_FLAG_NOFOLLOW : 0));
 #endif
   }
 
@@ -1297,13 +1298,18 @@ attr_print(const char *key,
 	   void *extra) {
   ATTR *aip = (ATTR *) val;
 
-  printf("      %s = ", key);
-  if (is_printable(aip->buf, aip->len))
-    printf("\"%s\"\n", aip->buf);
-  else {
-    print_hex(aip->buf, aip->len);
-    puts(" [hex]");
-  }
+  if (aip) {
+    printf("      %s = ", key);
+    if (is_printable(aip->buf, aip->len))
+      printf("\"%s\"", aip->buf);
+    else {
+      print_hex(aip->buf, aip->len);
+      puts(" [hex]");
+    }
+  } else
+    printf("      %s", key);
+  putchar('\n');
+  
   return 0;
 }
 
@@ -1339,11 +1345,11 @@ node_print(const char *key,
   if (nip->a.def)
     putchar('D');
 #endif
-#if defined(EXTATTR_NAMESPACE_SYSTEM)
+#if defined(ATTR_NAMESPACE_SYSTEM)
   if (nip->x.sys && btree_entries(nip->x.sys) > 0)
     putchar('S');
 #endif
-#if defined(EXTATTR_NAMESPACE_USER)
+#if defined(ATTR_NAMESPACE_USER)
   if (nip->x.usr && btree_entries(nip->x.usr) > 0)
     putchar('U');
 #endif
@@ -1396,13 +1402,13 @@ node_print(const char *key,
       acl_free(t);
     }
 #endif
-#if defined(EXTATTR_NAMESPACE_SYSTEM)
+#if defined(ATTR_NAMESPACE_SYSTEM)
     if (nip->x.sys && btree_entries(nip->x.sys) > 0) {
       puts("    System Attributes:");
       btree_foreach(nip->x.sys, attr_print, NULL);
     }
 #endif
-#if defined(EXTATTR_NAMESPACE_USER)
+#if defined(ATTR_NAMESPACE_USER)
     if (nip->x.usr && btree_entries(nip->x.usr) > 0) {
       puts("    User Attributes:");
       btree_foreach(nip->x.usr, attr_print, NULL);
@@ -1503,7 +1509,7 @@ attrs_compare(BTREE *a,
     return 1;
   }
 
-  if (f_remove && b) {
+  if (/* f_remove && */ b) {
     rc = btree_foreach(b, attrs_compare_handler, (void *) a);
     if (rc) {
       if (f_debug)
@@ -1606,12 +1612,12 @@ node_compare(NODE *a,
   }
 
   if (f_attrs) {
-#if defined(EXTATTR_NAMESPACE_SYSTEM)
+#if defined(ATTR_NAMESPACE_SYSTEM)
     /* Check Extended Attributes */
     if (a->x.sys && attrs_compare(a->x.sys, b->x.sys))
       d |= 0x01000000;
 #endif
-#if defined(EXTATTR_NAMESPACE_USER)
+#if defined(ATTR_NAMESPACE_USER)
     if (a->x.usr && attrs_compare(a->x.usr, b->x.usr))
       d |= 0x02000000;
 #endif

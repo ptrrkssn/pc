@@ -33,6 +33,7 @@
 
 #include "config.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -179,7 +180,7 @@ attr_set(const char *path,
 	 const void *data,
 	 size_t size,
 	 int flags) {
-  return getxattr(path, name, data, size, 0,
+  return setxattr(path, name, (void *) data, size, 0,
 		  (flags & ATTR_FLAG_NOFOLLOW) ? XATTR_NOFOLLOW : 0);
 }
 
@@ -208,7 +209,7 @@ attr_foreach(const char *path,
   char *buf, *end, *name;
   int rc = 0;
   
-  
+
   bufsize = listxattr(path, NULL, 0,
 		      (flags & ATTR_FLAG_NOFOLLOW) ? XATTR_NOFOLLOW : 0);
   if (bufsize < 0)
@@ -257,38 +258,6 @@ attr_get(const char *path,
     return extattr_get_link(path, ns, name, data, size);
   else
     return extattr_get_file(path, ns, name, data, size);
-}
-
-ssize_t
-attr_get2(const char *path,
-	  int ns,
-	  const char *name,
-	  void **data,
-	  size_t size,
-	  int flags) {
-  ssize_t nsize;
-
-  
-  if (!data || !*data || !size) {
-    if (flags & ATTR_FLAG_NOFOLLOW)
-      nsize = extattr_get_link(path, ns, name, NULL, 0);
-    else
-      nsize = extattr_get_file(path, ns, name, NULL, 0);
-    
-    if (!data || nsize < 0)
-      return nsize;
-
-    *data = malloc(nsize);
-    if (!*data)
-      return -1;
-
-    size = nsize;
-  }
-  
-  if (flags & ATTR_FLAG_NOFOLLOW)
-    return extattr_get_link(path, ns, name, *data, size);
-  else
-    return extattr_get_file(path, ns, name, *data, size);
 }
 
 
@@ -569,15 +538,14 @@ attr_list_handler(const char *path,
   BTREE *bp = (BTREE *) xp;
   ATTR *ap = NULL;
 
-  
+
   if (flags & ATTR_FLAG_GETDATA) {
     size_t asize;
 
-    
     asize = attr_get(path, ns, name, NULL, 0, flags);
     if (asize < 0)
       return asize;
-    
+
     ap = attr_alloc(asize);
     if (!ap)
       return -1;
@@ -594,7 +562,7 @@ attr_list_handler(const char *path,
   name = strdup(name);
   if (!name)
     return -1;
-  
+
   return btree_insert(bp, name, (void *) ap);
 }
 
@@ -605,6 +573,7 @@ attr_list(const char *path,
 	  int flags) {
   BTREE *bp;
   int rc;
+
   
   bp = btree_create(NULL, NULL);
   if (!bp)
@@ -618,5 +587,3 @@ attr_list(const char *path,
     
   return bp;
 }
-
-

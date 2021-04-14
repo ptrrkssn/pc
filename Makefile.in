@@ -54,7 +54,7 @@ config.h.in: configure.ac
 clean:
 	-rm -fr *.o pc \#* *~ core t
 
-distclean: reconfigure clean
+distclean: reconfigure tests-clean clean
 	-rm -fr config.log config.status Makefile config.h autom4te.cache
 
 install:
@@ -65,10 +65,10 @@ install:
 push:	distclean
 	git add -A && git commit -a && git push
 
-tests:	test-setup test-0 test-1 # test-2 test-3 test-4 test-5
+tests-clean:
+	rm -fr t && mkdir t && cd t && mkdir -p a/ad b/bd && touch a/af b/bf
 
-test-setup:
-	rm -fr t && mkdir t && cd t && mkdir -p a/a-d1 a/a-d2 a/a-d1/a-d1-d4 b b/b-d1; touch a/a-f1 a/a-f2 a/a-d2/a-d2-f1 a/a-d1/a-d1-d4/a-d1-d4-f1 b/b-f1
+tests:	tests-clean test-0 test-1 # test-2 test-3 test-4 test-5
 
 test-0: pc
 	./pc -h
