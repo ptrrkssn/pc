@@ -47,9 +47,10 @@ AC_ARG_WITH([acls],
  AS_HELP_STRING([--without-acls], [Don't build support for ACLs]))
 
 if test "x$with_acls" != "xno"; then
-   AC_SEARCH_LIBS([acl], [acl])
+dnl   Solaris acl stuff we don't currently use
+dnl   AC_SEARCH_LIBS([acl_get], [sec])
    AC_CHECK_HEADERS([sys/acl.h])
-   AC_CHECK_FUNCS([acl_get_file acl_set_file acl_set_link_np acl_get_link_np acl_get acl_set acl])
+   AC_CHECK_FUNCS([acl_get_file acl_set_file acl_set_link_np acl_get_link_np acl])
 fi
 
 
@@ -66,7 +67,7 @@ AC_ARG_WITH([fflags],
  AS_HELP_STRING([--without-fflags], [Don't build support for file flags]))
 
 if test "x$with_fflags" != "xno"; then
-   AC_CHECK_FUNCS([chflags lchflags])
+   AC_CHECK_FUNCS([chflags lchflags getattrat])
 fi
 
 
