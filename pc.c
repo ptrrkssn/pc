@@ -600,9 +600,9 @@ node_update(NODE *src_nip,
           }
         }
       }
+#endif
 #if defined(ACL_TYPE_NFS4)
     } /* Ignore Posix ACL if we've already got NFS ACL */
-#endif
 #endif
     
     /* Set NFSv4/ZFS/Extended ACLs after POSIX ACLs in of both */
