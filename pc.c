@@ -498,7 +498,7 @@ node_update(NODE *src_nip,
         rc = xrc;
       }
     }
-    if (/* f_remove && */ dst_nip && dst_nip->x.usr) {
+    if (dst_nip && dst_nip->x.usr) {
       aub.ns = ATTR_NAMESPACE_USER;
       aub.attrs = src_nip ? src_nip->x.usr : NULL;
       
@@ -522,7 +522,7 @@ node_update(NODE *src_nip,
         rc = xrc;
       }
     }
-    if (/* f_remove && */ dst_nip && dst_nip->x.sys) {
+    if (dst_nip && dst_nip->x.sys) {
       aub.ns = ATTR_NAMESPACE_SYSTEM;
       aub.attrs = src_nip ? src_nip->x.sys : NULL;
       
@@ -537,6 +537,75 @@ node_update(NODE *src_nip,
   }
   
   if (f_acls) {
+#if defined(ACL_TYPE_NFS4)
+    if (f_nfsonly == 0 || (f_nfsonly == 1 && !src_nip->a.nfs)) {
+#endif
+#if defined(ACL_TYPE_ACCESS)
+      if (src_nip->a.acc) {
+        if (!dst_nip || acl_compare(src_nip->a.acc, dst_nip->a.acc) != 0) {
+          if (S_ISLNK(src_nip->s.st_mode)) {
+#if HAVE_ACL_SET_LINK_NP
+            xrc = acl_set_link_np(dstpath, ACL_TYPE_ACCESS, src_nip->a.acc);
+#else
+            errno = ENOSYS;
+            xrc = -1;
+#endif
+            if (xrc < 0) {
+              fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_ACCESS): %s\n",
+                      argv0, dstpath, strerror(errno));
+              if (!f_ignore)
+                return xrc;
+              rc = xrc;
+            }
+          } else {
+            xrc = acl_set_file(dstpath, ACL_TYPE_ACCESS, src_nip->a.acc);
+            if (xrc < 0) {
+              fprintf(stderr, "%s: Error: %s: acl_set_file(ACL_TYPE_ACCESS): %s\n",
+                      argv0, dstpath, strerror(errno));
+              if (!f_ignore)
+                return xrc;
+              rc = xrc;
+            }
+          }
+        }
+      }
+#endif
+      
+#if defined(ACL_TYPE_DEFAULT)
+      if (src_nip->a.def) {
+        if (!dst_nip || acl_compare(src_nip->a.def, dst_nip->a.def) != 0) {
+          if (S_ISLNK(src_nip->s.st_mode)) {
+#if HAVE_ACL_SET_LINK_NP
+            xrc = acl_set_link_np(dstpath, ACL_TYPE_DEFAULT, src_nip->a.def);
+#else
+            errno = ENOSYS;
+            xrc = -1;
+#endif
+            if (xrc < 0) {
+              fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_DEFAULT): %s\n",
+                      argv0, dstpath, strerror(errno));
+              if (!f_ignore)
+                return xrc;
+              rc = xrc;
+            }
+          } else {
+            xrc = acl_set_file(dstpath, ACL_TYPE_DEFAULT, src_nip->a.def);
+            if (xrc < 0) {
+              fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_DEFAULT): %s\n",
+                      argv0, dstpath, strerror(errno));
+              if (!f_ignore)
+                return xrc;
+              rc = xrc;
+            }
+          }
+        }
+      }
+#if defined(ACL_TYPE_NFS4)
+    } /* Ignore Posix ACL if we've already got NFS ACL */
+#endif
+#endif
+    
+    /* Set NFSv4/ZFS/Extended ACLs after POSIX ACLs in of both */
 #if defined(ACL_TYPE_NFS4)
     if (src_nip->a.nfs) {
       if (!dst_nip || acl_compare(src_nip->a.nfs, dst_nip->a.nfs) != 0) {
@@ -568,72 +637,6 @@ node_update(NODE *src_nip,
 	}
       }
     }
-#endif
-#if defined(ACL_TYPE_NFS4) && defined(ACL_TYPE_ACCESS)
-    if (f_nfsonly == 0 || (f_nfsonly == 1 && !src_nip->a.nfs)) {
-#endif
-#if defined(ACL_TYPE_ACCESS)
-    if (src_nip->a.acc) {
-      if (!dst_nip || acl_compare(src_nip->a.acc, dst_nip->a.acc) != 0) {
-        if (S_ISLNK(src_nip->s.st_mode)) {
-#if HAVE_ACL_SET_LINK_NP
-          xrc = acl_set_link_np(dstpath, ACL_TYPE_ACCESS, src_nip->a.acc);
-#else
-          errno = ENOSYS;
-          xrc = -1;
-#endif
-          if (xrc < 0) {
-            fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_ACCESS): %s\n",
-                    argv0, dstpath, strerror(errno));
-            if (!f_ignore)
-              return xrc;
-            rc = xrc;
-          }
-	} else {
-          xrc = acl_set_file(dstpath, ACL_TYPE_ACCESS, src_nip->a.acc);
-          if (xrc < 0) {
-            fprintf(stderr, "%s: Error: %s: acl_set_file(ACL_TYPE_ACCESS): %s\n",
-                    argv0, dstpath, strerror(errno));
-            if (!f_ignore)
-              return xrc;
-            rc = xrc;
-          }
-	}
-      }
-    }
-#endif
-#if defined(ACL_TYPE_DEFAULT)
-    if (src_nip->a.def) {
-      if (!dst_nip || acl_compare(src_nip->a.def, dst_nip->a.def) != 0) {
-        if (S_ISLNK(src_nip->s.st_mode)) {
-#if HAVE_ACL_SET_LINK_NP
-          xrc = acl_set_link_np(dstpath, ACL_TYPE_DEFAULT, src_nip->a.def);
-#else
-          errno = ENOSYS;
-          xrc = -1;
-#endif
-          if (xrc < 0) {
-            fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_DEFAULT): %s\n",
-                    argv0, dstpath, strerror(errno));
-            if (!f_ignore)
-              return xrc;
-            rc = xrc;
-          }
-	} else {
-          xrc = acl_set_file(dstpath, ACL_TYPE_DEFAULT, src_nip->a.def);
-          if (xrc < 0) {
-            fprintf(stderr, "%s: Error: %s: acl_set_link_np(ACL_TYPE_DEFAULT): %s\n",
-                    argv0, dstpath, strerror(errno));
-            if (!f_ignore)
-              return xrc;
-            rc = xrc;
-          }
-	}
-      }
-    }
-#if defined(ACL_TYPE_NFS4) && defined(ACL_TYPE_ACCESS)
-    } /* Ignore Posix ACL if we've already got NFS ACL */
-#endif
 #endif
   }
   
@@ -1374,7 +1377,7 @@ attrs_compare(BTREE *a,
     return 1;
   }
 
-  if (/* f_remove && */ b) {
+  if (b) {
     rc = btree_foreach(b, attrs_compare_handler, (void *) a);
     if (rc) {
       if (f_debug)
