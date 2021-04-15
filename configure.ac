@@ -89,8 +89,8 @@ if test "x$with_zlib" != "xno"; then
    have_zlib_lib=no
    have_zlib_h=no
    
-   AC_SEARCH_LIBS([crc32_z], [z], [have_zlib=yes], [
-     AC_SEARCH_LIBS([adler32_z], [z], [have_zlib=yes])])
+   AC_SEARCH_LIBS([crc32_z], [z], [have_zlib_lib=yes], [
+     AC_SEARCH_LIBS([adler32_z], [z], [have_zlib_lib=yes])])
      
    if test "x$have_zlib_lib" = "xyes"; then
      AC_CHECK_HEADERS([zlib.h], [have_zlib_h=yes])

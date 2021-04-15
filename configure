@@ -4255,7 +4255,7 @@ $as_echo "$ac_cv_search_crc32_z" >&6; }
 ac_res=$ac_cv_search_crc32_z
 if test "$ac_res" != no; then :
   test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
-  have_zlib=yes
+  have_zlib_lib=yes
 else
 
      { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing adler32_z" >&5
@@ -4311,7 +4311,7 @@ $as_echo "$ac_cv_search_adler32_z" >&6; }
 ac_res=$ac_cv_search_adler32_z
 if test "$ac_res" != no; then :
   test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
-  have_zlib=yes
+  have_zlib_lib=yes
 fi
 
 fi

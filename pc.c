@@ -143,6 +143,7 @@ int f_perms   = 0;
 int f_owner   = 0;
 int f_times   = 0;
 int f_acls    = 0;
+int f_nfsonly = 0;
 int f_attrs   = 0;
 int f_flags   = 0; /* Check and copy file flags */
 int f_aflag   = 0; /* Check the special UF_ARCHIVE flag and reset it when copying files */
@@ -568,6 +569,9 @@ node_update(NODE *src_nip,
       }
     }
 #endif
+#if defined(ACL_TYPE_NFS4) && defined(ACL_TYPE_ACCESS)
+    if (f_nfsonly == 0 || (f_nfsonly == 1 && !src_nip->a.nfs)) {
+#endif
 #if defined(ACL_TYPE_ACCESS)
     if (src_nip->a.acc) {
       if (!dst_nip || acl_compare(src_nip->a.acc, dst_nip->a.acc) != 0) {
@@ -627,6 +631,9 @@ node_update(NODE *src_nip,
 	}
       }
     }
+#if defined(ACL_TYPE_NFS4) && defined(ACL_TYPE_ACCESS)
+    } /* Ignore Posix ACL if we've already got NFS ACL */
+#endif
 #endif
   }
   
@@ -2097,36 +2104,37 @@ typedef struct option {
 } OPTION;
 
 OPTION opts[] = {
-  { 'h', "help",        NULL,        "Display this information", 0, NULL },
-  { 'v', "verbose",     NULL,        "Increase verbosity", 0, NULL },
-  { 'd', "debug",       NULL,        "Increase debug level", 0, NULL },
-  { 'n', "dry-run",     NULL,        "Do a dry-run (No updates)", 0, NULL },
-  { 'f', "force",       NULL,        "Force updates", 0, NULL },
-  { 'i', "ignore",      NULL,        "Ignore errors and continue", 0, NULL },
-  { 'r', "recurse",     NULL,        "Recurse into subdirectories", 0, NULL },
-  { 'p', "preserve",    NULL,        "Check and preserve mode bits", 0, NULL },
-  { 'o', "owner",       NULL,        "Check and preserve owner & group", 0, NULL },
-  { 't', "times",       NULL,        "Check mtime (and preserve mtime & atime if -tt)", 0, NULL },
-  { 'x', "expunge",     NULL,        "Remove/replace deleted/changed objects", 0, NULL },
-  { 'u', "no-copy",     NULL,        "Do not copy file contents", 0, NULL },
-  { 'z', "zero-fill",   NULL,        "Try to generate zero-holed files", 0, NULL },
+  { 'h', "help",           NULL,        "Display this information", 0, NULL },
+  { 'v', "verbose",        NULL,        "Increase verbosity", 0, NULL },
+  { 'd', "debug",          NULL,        "Increase debug level", 0, NULL },
+  { 'n', "dry-run",        NULL,        "Do a dry-run (No updates)", 0, NULL },
+  { 'f', "force",          NULL,        "Force updates", 0, NULL },
+  { 'i', "ignore",         NULL,        "Ignore errors and continue", 0, NULL },
+  { 'r', "recurse",        NULL,        "Recurse into subdirectories", 0, NULL },
+  { 'p', "preserve",       NULL,        "Check and preserve mode bits", 0, NULL },
+  { 'o', "owner",          NULL,        "Check and preserve owner & group", 0, NULL },
+  { 't', "times",          NULL,        "Check mtime (and preserve mtime & atime if -tt)", 0, NULL },
+  { 'x', "expunge",        NULL,        "Remove/replace deleted/changed objects", 0, NULL },
+  { 'u', "no-copy",        NULL,        "Do not copy file contents", 0, NULL },
+  { 'z', "zero-fill",      NULL,        "Try to generate zero-holed files", 0, NULL },
 #if defined(HAVE_ACL_GET_FILE) || defined(HAVE_ACL)
-  { 'A', "acls",        NULL,        "Copy ACLs", 0, NULL },
+  { 'A', "acls",           NULL,        "Copy ACLs", 0, NULL },
+  { 'N', "no-posix-acls",  NULL,        "Ignore POSIX ACLs (-NN = ignore if NFS ACL exist)", 0, NULL },
 #endif
 #if defined(HAVE_GETXATTR) || defined(HAVE_EXTATTR_GET_FILE)
-  { 'X', "attributes",  NULL,        "Copy extended attributes", 0, NULL },
+  { 'X', "attributes",     NULL,        "Copy extended attributes", 0, NULL },
 #endif
 #if defined(HAVE_LCHFLAGS)
-  { 'F', "file-flags",  NULL,        "Copy file flags", 0, NULL },
+  { 'F', "file-flags",     NULL,        "Copy file flags", 0, NULL },
 #if defined(UF_ARCHIVE)
-  { 'U', "archive-flag",  NULL,      "Check and update source archive flags", 0, NULL },
+  { 'U', "archive-flag",   NULL,      "Check and update source archive flags", 0, NULL },
 #endif
 #endif
-  { 'a', "archive",     NULL,        "Archive mode (equal to '-rpottAXFU')", 0, NULL },
-  { 'M', "mirror",      NULL,        "Mirror mode (equal to '-ax')", 0, NULL },
-  { 'B', "buffer-size", "<size>",    "Set copy buffer size", OPT_SIZE, &f_bufsize },
-  { 'D', "digest",      "<digest>",  "Set file content digest algorithm", 0, NULL },
-  { 0, NULL, NULL },
+  { 'a', "archive",        NULL,        "Archive mode (equal to '-rpottAXFU')", 0, NULL },
+  { 'M', "mirror",         NULL,        "Mirror mode (equal to '-ax')", 0, NULL },
+  { 'B', "buffer-size", "<size>",       "Set copy buffer size", OPT_SIZE, &f_bufsize },
+  { 'D', "digest",      "<digest>",     "Set file content digest algorithm", 0, NULL },
+  { 0, NULL, NULL, NULL },
 };
 
   
@@ -2264,9 +2272,14 @@ main(int argc,
 	++f_remove;
 	break;
 
+      case 'N':
+	++f_nfsonly;
+	break;
+        
       case 'A':
 	++f_acls;
 	break;
+        
 #if defined(HAVE_GETXATTR) || defined(HAVE_EXTATTR_GET_FILE)
       case 'X':
 	++f_attrs;
@@ -2332,7 +2345,7 @@ main(int argc,
 	printf("  %s [<options>] <src> <dst>\n", argv0);
 	printf("\nOptions:\n");
 	for (k = 0; opts[k].s; k++) {
-	  printf("  -%c | --%s%*s%-15s%s",
+	  printf("  -%c | --%s%*s%-12s%s",
 		 opts[k].c,
 		 opts[k].s,
 		 (int) (15-strlen(opts[k].s)), "",

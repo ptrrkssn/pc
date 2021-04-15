@@ -1,4 +1,5 @@
 * Clean up the code a bit more
+* Memory-optimize the code (do files in each dir, free them, then do subdirs)
 * Create a manual page
 * Better documentation
 * Smarter/more efficient comparision of ACLs
@@ -6,9 +7,9 @@
 * Use threads to run copies in parallel
 * Add a remote mode
 * Expand the test suite
-* Support io_uring on Linux
+* Support io_uring on Linux?
 * Support copying of Solaris fsattr (man fgetattr) - similar to file flags
 * Handle Solaris attribute directories (multiple levels of extended attributes)
 * POSIX to NFS4/ZFS-ACLs conversion on the fly
 * Support "file flags" on Linux via ioctl(FS_IOC_FSSETXATTR/FS_IOC_FSGETXATTR)
-* SMB support
+* SMB support via libsmbclient?
