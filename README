@@ -10,9 +10,9 @@ to avoid/copying files unless it has been modified/differs from the source.
 
 OPERATING SYSTEMS
 
-  - FreeBSD (tested on 12.2)
-  - Linux (tested on Ubuntu 20)
-  - MacOS (tested on 10.15)
+  - FreeBSD (tested on 12.2 & 13.0)
+  - Linux (tested on Ubuntu 20.04)
+  - MacOS (tested on 10.15.7 & 11.2.3)
   - Solaris/Illumos (tested on OmniOS)
   
 
